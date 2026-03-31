@@ -74,6 +74,29 @@ def analyze_column_quality(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def detect_id_columns(df: pd.DataFrame, quality_df: pd.DataFrame) -> list[str]:
+    """Detect columns that are likely identifiers.
+
+    Two signals:
+    1. Column name contains 'id' (case-insensitive, whole word-like patterns)
+    2. Column was flagged as 'id_like' by quality analysis
+    """
+    id_cols = set()
+
+    # Name-based: "id", "ID", "_id", "Id", columns ending/starting with id
+    import re
+    id_pattern = re.compile(r'(?:^|[_\- ])id(?:[_\- ]|$)|^id$|_id$|Id$|ID$|^id_|^ID_', re.IGNORECASE)
+    for col in df.columns:
+        if id_pattern.search(col):
+            id_cols.add(col)
+
+    # Quality-based: flagged as id_like
+    flagged_ids = quality_df.loc[quality_df["flags"].str.contains("id_like", na=False), "column"].tolist()
+    id_cols.update(flagged_ids)
+
+    return list(id_cols)
+
+
 def get_safe_columns(quality_df: pd.DataFrame) -> list[str]:
     """Return columns that passed quality checks."""
     return quality_df.loc[quality_df["recommended"], "column"].tolist()
