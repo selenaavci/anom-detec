@@ -108,12 +108,21 @@ quality_df = analyze_column_quality(df)
 flagged = quality_df[quality_df["flags"] != "-"]
 if not flagged.empty:
     st.info(
-        f"Bazı sütunlarda öneriler tespit edildi. "
+        f"{len(flagged)} sütunda öneri tespit edildi. "
         f"Bu sütunları yine de kullanabilirsiniz, ancak sonuçları etkileyebilir."
     )
-    with st.expander("Sütun önerileri (detay)"):
-        for _, frow in flagged.iterrows():
-            st.markdown(f"- **{frow['column']}**: {frow['flag_reasons']}")
+    with st.expander("Kalite önerileri (detay)", expanded=True):
+        flag_display = flagged[["column", "dtype", "unique", "unique_ratio", "missing_pct", "flags"]].copy()
+        flag_display.columns = ["Sütun", "Tip", "Benzersiz", "Benzersiz Oranı", "Eksik %", "Öneri"]
+        st.dataframe(flag_display, use_container_width=True, hide_index=True)
+
+        st.markdown("""
+        **Öneri türleri:**
+        - **id_like**: Benzersiz değer oranı çok yüksek — muhtemelen ID sütunu
+        - **constant**: Tek bir değer içeriyor — analiz için bilgi taşımaz
+        - **free_text**: Serbest metin alanı — anomali tespitine uygun değil
+        - **high_cardinality**: Çok fazla kategori — otomatik olarak frekans bazlı dönüşüm uygulanacak
+        """)
 else:
     st.success("Tüm sütunlar kalite kontrolünden geçti.")
 
