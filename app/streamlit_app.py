@@ -94,8 +94,8 @@ st.sidebar.info(tip_text)
 # ── 1. File upload ───────────────────────────────────────────────────────────
 st.header("1. Veri Yükleme")
 uploaded_file = st.file_uploader(
-    "CSV veya Excel dosyası yükleyin",
-    type=["csv", "xls", "xlsx"],
+    "CSV, Excel veya ZIP dosyası yükleyin",
+    type=["csv", "xls", "xlsx", "zip"],
 )
 
 if uploaded_file is None:
