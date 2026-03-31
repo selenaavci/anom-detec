@@ -23,7 +23,7 @@ def run_isolation_forest(
         n_estimators=100,
     )
     model.fit(data)
-    scores = -model.decision_function(data)  # higher = more anomalous
+    scores = -model.decision_function(data) 
     return scores, model
 
 
@@ -98,7 +98,7 @@ def run_semi_supervised(
     - Unlabeled rows (label=-1) are included in training.
     - Scores are computed for ALL rows.
     """
-    # Training set: exclude confirmed anomalies
+
     train_mask = labels != 1
     train_data = data.loc[train_mask]
 
