@@ -2,52 +2,41 @@
 
 PRESETS = {
     "Genel (Varsayılan)": {
-        "description": "Herhangi bir veri seti tipi icin genel ayarlar.",
+        "description": "Herhangi bir veri seti tipi için genel ayarlar.",
         "contamination": 0.05,
         "model": "isolation_forest",
         "tips": [
-            "Sayisal sutunlari tercih edin",
-            "ID ve tarih sutunlarini haric tutun",
+            "Sayısal sütunları tercih edin",
+            "ID ve tarih sütunlarını hariç tutun",
         ],
     },
-    "Operasyon Verisi": {
-        "description": "Uretim hatlari, makine sensoru verileri, lojistik operasyon verileri.",
-        "contamination": 0.03,
-        "model": "isolation_forest",
-        "tips": [
-            "Sensor olcumleri, sicaklik, basinc gibi sutunlari secin",
-            "Zaman damgasi sutunlarini haric tutun",
-            "Dusuk kontaminasyon orani nadir arizalari yakalar",
-        ],
-    },
-    "Islem / Finans Verisi": {
-        "description": "Odeme, fatura, sigorta talepleri, banka islem kayitlari.",
+    "İşlem / Finans Verisi": {
+        "description": "Ödeme, Fatura, Sigorta Talepleri, Banka İşlem Kayıtları.",
         "contamination": 0.02,
         "model": "isolation_forest",
         "tips": [
-            "Tutar, adet, oran gibi sayisal sutunlari secin",
-            "Musteri ID sutunlarini haric tutun",
-            "Dusuk kontaminasyon orani sahtecilik tespitinde daha etkilidir",
+            "Tutar, adet, oran gibi sayısal sütunları seçin",
+            "Müşteri ID sütunlarını hariç tutun",
+            "Düşük kontaminasyon oranı sahtecilik tespitinde daha etkilidir",
         ],
     },
-    "HR / Insan Kaynaklari Verisi": {
-        "description": "Calisan performans, maas, devamsizlik, ise alim verileri.",
+    "İnsan Kaynakları Verisi": {
+        "description": "Çalışan Performans, Maaş, Devamsızlık, İşe Alım Verileri.",
         "contamination": 0.05,
         "model": "lof",
         "tips": [
-            "Maas, deneyim yili, performans puani gibi sutunlari secin",
-            "Isim ve TC kimlik no sutunlarini haric tutun",
-            "LOF modeli kume ici aykiri degerleri iyi yakalar",
+            "Maaş, deneyim yılı, performans puanı gibi sütunları seçin",
+            "İsim ve TC kimlik no sütunlarını hariç tutun",
         ],
     },
-    "Cagri Merkezi Verisi": {
-        "description": "Cagri suresi, bekleme suresi, memnuniyet puani, cagri hacmi verileri.",
+    "Çağrı Merkezi Verisi": {
+        "description": "Çağrı Süresi, Bekleme Süresi, Memnuniyet Puanı, Çağrı Hacmi Verileri.",
         "contamination": 0.05,
         "model": "isolation_forest",
         "tips": [
-            "Cagri suresi, bekleme suresi, memnuniyet skoru secin",
-            "Agent ID ve musteri ID sutunlarini haric tutun",
-            "Asiri uzun veya kisa cagrilari tespit etmeye odaklanin",
+            "Çağrı süresi, bekleme süresi, memnuniyet skoru seçin",
+            "Agent ID ve müşteri ID sütunlarını hariç tutun",
+            "Aşırı uzun veya kısa çağrılarını tespit etmeye odaklanın",
         ],
     },
 }
