@@ -10,7 +10,7 @@ PRESETS = {
             "ID ve tarih sütunlarını hariç tutun",
         ],
     },
-    "Işlem / Finans Verisi": {
+    "İşlem / Finans Verisi": {
         "description": "Ödeme, fatura, sigorta talepleri, banka işlem kayıtları.",
         "contamination": 0.02,
         "model": "isolation_forest",
@@ -30,7 +30,7 @@ PRESETS = {
             "LOF modeli küme içi aykırı değerleri iyi yakalayabilir",
         ],
     },
-    "Cagri Merkezi Verisi": {
+    "Çağrı Merkezi Verisi": {
         "description": "Çağrı süresi, bekleme süresi, memnuniyet puani, çağrı hacmi verileri.",
         "contamination": 0.05,
         "model": "isolation_forest",
