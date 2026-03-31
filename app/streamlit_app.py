@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-# Ensure the project root is on sys.path so imports work on Streamlit Cloud
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
@@ -108,7 +107,6 @@ st.header("3. Kolon Kalite Kontrolu")
 
 quality_df = analyze_column_quality(df)
 
-# Show flagged columns
 flagged = quality_df[quality_df["flags"] != "-"]
 if not flagged.empty:
     st.warning(f"{len(flagged)} sutunda kalite uyarisi tespit edildi.")
@@ -147,7 +145,7 @@ st.warning(
     "secime dahil etmemeye dikkat edin. Bu tur sutunlar analiz sonuclarini olumsuz etkiler."
 )
 
-# Default: safe columns only
+
 safe_columns = get_safe_columns(quality_df)
 safe_defaults = [c for c in safe_columns if c in all_usable]
 
@@ -161,7 +159,6 @@ if not selected_columns:
     st.warning("En az bir sutun secmelisiniz.")
     st.stop()
 
-# Warn if user selected a flagged column
 selected_flagged = flagged[flagged["column"].isin(selected_columns)]
 if not selected_flagged.empty:
     cols_str = ", ".join(selected_flagged["column"].tolist())
@@ -175,8 +172,7 @@ if st.button("Anomali Tespiti Calistir", type="primary", use_container_width=Tru
         processed, scaler, feature_names = preprocess(df, selected_columns)
         scores, fitted_model = detect_anomalies(processed, model_name=model_key, contamination=contamination)
         contributions = compute_feature_contributions(processed, df, selected_columns)
-
-    # Attach results to original dataframe
+        
     result_df = df.copy()
     result_df["anomaly_score"] = scores
     result_df = result_df.sort_values("anomaly_score", ascending=False)
@@ -187,7 +183,7 @@ if st.button("Anomali Tespiti Calistir", type="primary", use_container_width=Tru
     st.session_state["processed"] = processed
     st.session_state["feature_names"] = feature_names
     st.session_state["contributions"] = contributions
-    # Initialize feedback store
+
     if "feedback" not in st.session_state:
         st.session_state["feedback"] = {}
 
@@ -203,7 +199,6 @@ contributions = st.session_state["contributions"]
 
 st.header("6. Sonuclar")
 
-# Summary metrics
 threshold = scores.quantile(1 - contamination)
 n_anomalies = int((scores >= threshold).sum())
 
@@ -212,7 +207,6 @@ m1.metric("Toplam Kayit", len(result_df))
 m2.metric("Tespit Edilen Anomali", n_anomalies)
 m3.metric("Anomali Orani", f"%{n_anomalies / len(result_df) * 100:.1f}")
 
-# Score distribution
 st.subheader("Anomali Skor Dagilimi")
 fig = px.histogram(
     result_df,
@@ -224,7 +218,6 @@ fig = px.histogram(
 fig.add_vline(x=threshold, line_dash="dash", line_color="red", annotation_text="Esik Deger")
 st.plotly_chart(fig, use_container_width=True)
 
-# Top anomalies table
 st.subheader(f"En Supheli {top_n} Kayit")
 top_anomalies = result_df.head(top_n)
 st.dataframe(
@@ -309,7 +302,6 @@ for rank_val in feedback_ranks[:top_n]:
     else:
         col_status.markdown("_Bekliyor_")
 
-# Feedback summary
 fb = st.session_state["feedback"]
 n_feedback = len(fb)
 n_marked_anomaly = sum(1 for v in fb.values() if v == 1)
@@ -335,7 +327,6 @@ if n_feedback < min_feedback:
 else:
     if st.button("Yari Gozetimli Modeli Calistir", type="primary", use_container_width=True):
         with st.spinner("Geri bildirimlerle model yeniden egitiliyor..."):
-            # Build label series: -1 = unlabeled, 0 = normal, 1 = anomaly
             labels = pd.Series(-1, index=processed.index)
             for idx_key, label_val in fb.items():
                 if idx_key in labels.index:
@@ -345,7 +336,6 @@ else:
                 processed, labels, contamination=contamination,
             )
 
-        # Update results
         result_df_v2 = df.copy()
         result_df_v2["anomaly_score"] = new_scores
         result_df_v2 = result_df_v2.sort_values("anomaly_score", ascending=False)
@@ -367,7 +357,6 @@ else:
             hide_index=True,
         )
 
-        # Download updated results
         csv_v2 = result_df_v2.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="Guncellenmis Sonuclari CSV Olarak Indir",
