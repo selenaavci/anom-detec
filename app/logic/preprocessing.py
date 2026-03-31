@@ -8,10 +8,8 @@ def detect_column_types(df: pd.DataFrame) -> dict:
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
 
-    # Detect datetime columns (already parsed or parseable strings)
     datetime_cols = df.select_dtypes(include=["datetime", "datetimetz"]).columns.tolist()
 
-    # Try to detect date-like string columns
     for col in list(categorical_cols):
         sample = df[col].dropna().head(50)
         if len(sample) == 0:
@@ -98,14 +96,12 @@ def preprocess(
     numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
     categorical_cols = data.select_dtypes(include=["object", "category"]).columns.tolist()
 
-    # Fill missing values
     for col in numeric_cols:
         data[col] = data[col].fillna(data[col].median())
     for col in categorical_cols:
         mode = data[col].mode()
         data[col] = data[col].fillna(mode.iloc[0] if not mode.empty else "UNKNOWN")
 
-    # Encode categoricals
     encoded_parts = [data[numeric_cols]]
 
     for col in categorical_cols:
