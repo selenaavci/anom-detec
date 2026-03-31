@@ -8,6 +8,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+from io import BytesIO
+from openpyxl.styles import PatternFill
 
 from app.logic.file_loader import load_file
 from app.logic.preprocessing import (
@@ -26,6 +28,33 @@ from app.logic.anomaly_model import (
     MODELS,
 )
 from app.logic.presets import PRESETS
+
+NEON_YELLOW = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
+
+
+def to_styled_excel(dataframe: pd.DataFrame, anomaly_threshold: float) -> bytes:
+    """Write DataFrame to Excel with neon yellow highlight on anomaly rows."""
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        dataframe.to_excel(writer, index=False, sheet_name="Sonuçlar")
+        ws = writer.sheets["Sonuçlar"]
+
+        # Find anomaly_score column index (1-based in openpyxl)
+        score_col_idx = None
+        for idx, col in enumerate(dataframe.columns, start=1):
+            if col == "anomaly_score":
+                score_col_idx = idx
+                break
+
+        if score_col_idx is not None:
+            for row_idx in range(2, len(dataframe) + 2):  # skip header
+                cell_value = ws.cell(row=row_idx, column=score_col_idx).value
+                if cell_value is not None and cell_value >= anomaly_threshold:
+                    for col_idx in range(1, len(dataframe.columns) + 1):
+                        ws.cell(row=row_idx, column=col_idx).fill = NEON_YELLOW
+
+    return output.getvalue()
+
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Anomaly Detection", page_icon="🔍", layout="wide")
@@ -533,32 +562,33 @@ else:
             hide_index=True,
         )
 
-        csv_v2 = result_df_v2.to_csv(index=False).encode("utf-8")
+        xlsx_v2 = to_styled_excel(result_df_v2, new_threshold)
         st.download_button(
-            label="Güncellenmiş Sonuçları İndir",
-            data=csv_v2,
-            file_name="anomaly_results_v2.csv",
-            mime="text/csv",
+            label="Güncellenmiş Sonuçları İndir (Excel)",
+            data=xlsx_v2,
+            file_name="anomaly_results_v2.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
         )
 
 # ── Download ─────────────────────────────────────────────────────────────────
 st.header(f"{section_offset + 2}. Sonuçları İndir")
+st.markdown("Şüpheli bulunan kayıtlar Excel dosyasında **sarı** ile işaretlenmiştir.")
 
-csv_data = result_df.to_csv(index=False).encode("utf-8")
+xlsx_all = to_styled_excel(result_df, threshold)
 st.download_button(
-    label="Tüm Sonuçları CSV Olarak İndir",
-    data=csv_data,
-    file_name="anomaly_results.csv",
-    mime="text/csv",
+    label="Tüm Sonuçları İndir (Excel)",
+    data=xlsx_all,
+    file_name="anomaly_results.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True,
 )
 
-csv_anomalies = top_anomalies.to_csv(index=False).encode("utf-8")
+xlsx_top = to_styled_excel(top_anomalies, threshold)
 st.download_button(
-    label=f"En Şüpheli {top_n} Kaydı İndir",
-    data=csv_anomalies,
-    file_name="top_anomalies.csv",
-    mime="text/csv",
+    label=f"En Şüpheli {top_n} Kaydı İndir (Excel)",
+    data=xlsx_top,
+    file_name="top_anomalies.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     use_container_width=True,
 )
