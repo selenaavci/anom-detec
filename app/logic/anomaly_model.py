@@ -23,7 +23,7 @@ def run_isolation_forest(
         n_estimators=100,
     )
     model.fit(data)
-    return -model.decision_function(data)  # higher = more anomalous
+    return -model.decision_function(data)
 
 
 def run_lof(
