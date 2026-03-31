@@ -139,6 +139,6 @@ def compute_feature_contributions(
     For each row, returns the absolute z-score of each feature.
     Higher values indicate the feature deviates more from the norm.
     """
-    # Use the processed (already z-scored) data — absolute values show deviation
+
     abs_z = processed_df.abs()
     return abs_z
