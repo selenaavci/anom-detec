@@ -13,6 +13,7 @@ from app.logic.file_loader import load_file
 from app.logic.preprocessing import (
     detect_column_types,
     analyze_column_quality,
+    detect_id_columns,
     get_safe_columns,
     preprocess,
 )
@@ -126,11 +127,46 @@ if not flagged.empty:
 else:
     st.success("Tüm sütunlar kalite kontrolünden geçti.")
 
-# ── 4. Column selection ──────────────────────────────────────────────────────
-st.header("4. Sütun Seçimi")
+# ── 4. Identifier selection ──────────────────────────────────────────────────
+st.header("4. Tanımlayıcı (ID) Seçimi")
+
+id_candidates = detect_id_columns(df, quality_df)
+
+if id_candidates:
+    st.markdown(
+        f"Veri setinizde **{len(id_candidates)}** adet tanımlayıcı olabilecek sütun tespit edildi: "
+        f"**{', '.join(id_candidates)}**"
+    )
+    st.info(
+        "Aşağıdan hangi sütunların kayıtlarınızı tanımladığını seçin. "
+        "Seçtiğiniz sütunlar sonuçlarda referans olarak gösterilecek, ancak analize dahil edilmeyecektir."
+    )
+
+    selected_ids = st.multiselect(
+        "Tanımlayıcı olarak kullanılacak sütunlar",
+        options=id_candidates,
+        default=id_candidates,
+    )
+
+    # Remaining ID-like columns that user didn't pick as identifier
+    remaining_ids = [c for c in id_candidates if c not in selected_ids]
+    if remaining_ids:
+        st.info(
+            f"**{', '.join(remaining_ids)}** sütun(lar)ı tanımlayıcı olarak seçilmedi. "
+            f"Bu sütunları analize dahil edebilirsiniz, ancak ID benzeri yapıları sonuçları etkileyebilir."
+        )
+else:
+    st.success("Veri setinde otomatik tespit edilen bir tanımlayıcı sütun bulunamadı.")
+    selected_ids = []
+
+# ── 5. Column selection ──────────────────────────────────────────────────────
+st.header("5. Sütun Seçimi")
 
 col_types = detect_column_types(df)
 all_usable = col_types["numeric"] + col_types["categorical"]
+
+# Exclude chosen identifiers from defaults but keep them in options
+non_id_usable = [c for c in all_usable if c not in selected_ids]
 
 if not all_usable:
     st.error("Veri setinde kullanılabilir sayısal veya kategorik sütun bulunamadı.")
@@ -145,12 +181,12 @@ if col_types["datetime"]:
     st.markdown(f"**Tarih sütunları:** {', '.join(col_types['datetime'])}")
 
 st.info(
-    "Analiz için anlamlı sütunları seçin. ID numaraları, serbest metin gibi sütunlar "
-    "sonuçların doğruluğunu azaltabilir. Önerilen sütunlar otomatik seçilmiştir."
+    "Analiz için anlamlı sütunları seçin. Tanımlayıcı olarak seçtiğiniz sütunlar "
+    "varsayılan olarak analizden çıkarılmıştır. İsterseniz tekrar ekleyebilirsiniz."
 )
 
 safe_columns = get_safe_columns(quality_df)
-safe_defaults = [c for c in safe_columns if c in all_usable]
+safe_defaults = [c for c in safe_columns if c in non_id_usable]
 
 selected_columns = st.multiselect(
     "Analiz edilecek sütunları seçin",
@@ -162,17 +198,17 @@ if not selected_columns:
     st.warning("En az bir sütun seçmelisiniz.")
     st.stop()
 
-# Soft warning for flagged columns
-selected_flagged = flagged[flagged["column"].isin(selected_columns)]
-if not selected_flagged.empty:
-    cols_list = selected_flagged["column"].tolist()
+# Soft warning for flagged columns (excluding already chosen IDs)
+non_id_flagged = flagged[flagged["column"].isin(selected_columns) & ~flagged["column"].isin(selected_ids)]
+if not non_id_flagged.empty:
+    cols_list = non_id_flagged["column"].tolist()
     st.info(
         f"Seçtiğiniz **{', '.join(cols_list)}** sütun(lar)ı için önerilerimiz var. "
         f"Kullanmaya devam edebilirsiniz, sonuçları inceledikten sonra çıkarmayı deneyebilirsiniz."
     )
 
-# ── 5. Run detection (benchmark all models) ─────────────────────────────────
-st.header("5. Anomali Tespiti")
+# ── 6. Run detection (benchmark all models) ─────────────────────────────────
+st.header("6. Anomali Tespiti")
 
 st.markdown(
     "Sistem üç farklı yöntemi otomatik olarak çalıştırır, karşılaştırır ve "
@@ -201,11 +237,12 @@ if st.button("Analizi Başlat", type="primary", use_container_width=True):
     st.session_state["result_df"] = result_df
     st.session_state["scores"] = scores
     st.session_state["selected_columns"] = selected_columns
+    st.session_state["selected_ids"] = selected_ids
 
     if "feedback" not in st.session_state:
         st.session_state["feedback"] = {}
 
-# ── 6. Benchmark results ────────────────────────────────────────────────────
+# ── 7. Benchmark results ────────────────────────────────────────────────────
 if "bench_results" not in st.session_state:
     st.stop()
 
@@ -215,8 +252,9 @@ result_df = st.session_state["result_df"]
 scores = st.session_state["scores"]
 processed = st.session_state["processed"]
 sel_columns = st.session_state["selected_columns"]
+sel_ids = st.session_state.get("selected_ids", [])
 
-st.header("6. Model Karşılaştırması")
+st.header("7. Model Karşılaştırması")
 
 best_display = [k for k, v in MODELS.items() if v == best_key][0]
 st.success(f"En uygun model otomatik seçildi: **{best_display}**")
@@ -233,8 +271,8 @@ for r in bench_results:
     })
 st.dataframe(pd.DataFrame(bench_rows), use_container_width=True, hide_index=True)
 
-# ── 7. Results ───────────────────────────────────────────────────────────────
-st.header("7. Sonuçlar")
+# ── 8. Results ───────────────────────────────────────────────────────────────
+st.header("8. Sonuçlar")
 
 threshold = scores.quantile(1 - contamination)
 n_anomalies = int((scores >= threshold).sum())
@@ -256,23 +294,41 @@ fig.add_vline(x=threshold, line_dash="dash", line_color="red", annotation_text="
 fig.update_layout(title=None)
 st.plotly_chart(fig, use_container_width=True)
 
-# Top anomalies table
+# Top anomalies table — ID columns first for reference
 st.subheader(f"En Şüpheli {top_n} Kayıt")
 top_anomalies = result_df.head(top_n)
+
+# Reorder columns: IDs first, then anomaly_score + rank, then rest
+if sel_ids:
+    id_cols_present = [c for c in sel_ids if c in top_anomalies.columns]
+    other_cols = [c for c in top_anomalies.columns if c not in id_cols_present]
+    display_order = id_cols_present + ["anomaly_score", "rank"] + [
+        c for c in other_cols if c not in ["anomaly_score", "rank"]
+    ]
+    top_anomalies_display = top_anomalies[display_order]
+else:
+    top_anomalies_display = top_anomalies
+
 st.dataframe(
-    top_anomalies.style.background_gradient(subset=["anomaly_score"], cmap="Reds"),
+    top_anomalies_display.style.background_gradient(subset=["anomaly_score"], cmap="Reds"),
     use_container_width=True,
     hide_index=True,
 )
 
-# ── 8. Detail inspection — non-technical ─────────────────────────────────────
-st.header("8. Kayıt İnceleme")
+# ── 9. Detail inspection — non-technical ─────────────────────────────────────
+st.header("9. Kayıt İnceleme")
 st.markdown("Bir kaydı seçerek neden şüpheli bulunduğunu inceleyin.")
+
+def _format_rank(x):
+    r = top_anomalies.loc[top_anomalies["rank"] == x].iloc[0]
+    id_parts = [f"{c}: {r[c]}" for c in sel_ids if c in r.index] if sel_ids else []
+    id_label = f" ({', '.join(id_parts)})" if id_parts else ""
+    return f"Sıra {x}{id_label} — Şüphelilik: {r['anomaly_score']:.2f}"
 
 selected_rank = st.selectbox(
     "İncelemek istediğiniz kaydı seçin",
     options=top_anomalies["rank"].tolist(),
-    format_func=lambda x: f"Sıra {x} — Şüphelilik: {top_anomalies.loc[top_anomalies['rank'] == x, 'anomaly_score'].values[0]:.2f}",
+    format_func=_format_rank,
 )
 
 row_mask = top_anomalies["rank"] == selected_rank
@@ -283,6 +339,13 @@ detail_col, reason_col = st.columns(2)
 
 with detail_col:
     st.subheader("Kayıt Bilgileri")
+    # Show ID fields at top if available
+    if sel_ids:
+        id_values = {c: row[c] for c in sel_ids if c in row.index}
+        if id_values:
+            id_text = " &nbsp;|&nbsp; ".join([f"**{k}:** {v}" for k, v in id_values.items()])
+            st.markdown(id_text)
+            st.divider()
     row_dict = row.drop(["anomaly_score", "rank"]).to_dict()
     display_items = []
     for k, v in row_dict.items():
@@ -305,12 +368,12 @@ with reason_col:
     else:
         st.info("Bu kayıt için sayısal karşılaştırma yapılamadı.")
 
-# ── 9. Temporal anomaly ──────────────────────────────────────────────────────
+# ── 10. Temporal anomaly ─────────────────────────────────────────────────────
 datetime_cols = col_types["datetime"]
 numeric_cols_for_ts = [c for c in sel_columns if c in col_types["numeric"]]
 
 if datetime_cols and numeric_cols_for_ts:
-    st.header("9. Zaman Serisi Analizi")
+    st.header("10. Zaman Serisi Analizi")
     st.markdown(
         "Verilerinizde tarih sütunu tespit edildi. Zaman içindeki olağandışı değişimleri "
         "aşağıda inceleyebilirsiniz."
@@ -379,9 +442,9 @@ if datetime_cols and numeric_cols_for_ts:
                 hide_index=True,
             )
 
-    section_offset = 10
+    section_offset = 11
 else:
-    section_offset = 9
+    section_offset = 10
 
 # ── Feedback loop ────────────────────────────────────────────────────────────
 st.header(f"{section_offset}. Geri Bildirim")
