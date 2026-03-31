@@ -16,52 +16,99 @@ def run_isolation_forest(
     data: pd.DataFrame,
     contamination: float = 0.05,
     random_state: int = 42,
-) -> np.ndarray:
+) -> tuple[np.ndarray, IsolationForest]:
     model = IsolationForest(
         contamination=contamination,
         random_state=random_state,
         n_estimators=100,
     )
     model.fit(data)
-    return -model.decision_function(data)
+    scores = -model.decision_function(data)  # higher = more anomalous
+    return scores, model
 
 
 def run_lof(
     data: pd.DataFrame,
     contamination: float = 0.05,
     n_neighbors: int = 20,
-) -> np.ndarray:
+) -> tuple[np.ndarray, LocalOutlierFactor]:
     model = LocalOutlierFactor(
         n_neighbors=n_neighbors,
         contamination=contamination,
         novelty=False,
     )
     model.fit_predict(data)
-    return -model.negative_outlier_factor_
+    scores = -model.negative_outlier_factor_
+    return scores, model
 
 
 def run_ocsvm(
     data: pd.DataFrame,
     nu: float = 0.05,
-) -> np.ndarray:
+) -> tuple[np.ndarray, OneClassSVM]:
     model = OneClassSVM(kernel="rbf", nu=nu)
     model.fit(data)
-    return -model.decision_function(data)
+    scores = -model.decision_function(data)
+    return scores, model
 
 
 def detect_anomalies(
     data: pd.DataFrame,
     model_name: str = "isolation_forest",
     contamination: float = 0.05,
-) -> pd.Series:
-    """Run selected anomaly detection model and return anomaly scores."""
+) -> tuple[pd.Series, object]:
+    """Run selected anomaly detection model. Returns (scores, fitted_model)."""
     if model_name == "isolation_forest":
-        scores = run_isolation_forest(data, contamination=contamination)
+        scores, model = run_isolation_forest(data, contamination=contamination)
     elif model_name == "lof":
-        scores = run_lof(data, contamination=contamination)
+        scores, model = run_lof(data, contamination=contamination)
     elif model_name == "ocsvm":
-        scores = run_ocsvm(data, nu=contamination)
+        scores, model = run_ocsvm(data, nu=contamination)
     else:
         raise ValueError(f"Bilinmeyen model: {model_name}")
 
+    return pd.Series(scores, index=data.index, name="anomaly_score"), model
+
+
+def get_top_contributing_features(
+    processed_row: pd.Series,
+    top_k: int = 5,
+) -> pd.DataFrame:
+    """Return top-k features with highest absolute z-score for a single row."""
+    abs_z = processed_row.abs().sort_values(ascending=False).head(top_k)
+    contrib = pd.DataFrame({
+        "feature": abs_z.index,
+        "z_score": abs_z.values,
+        "direction": ["+" if processed_row[f] > 0 else "-" for f in abs_z.index],
+    })
+    return contrib
+
+
+def run_semi_supervised(
+    data: pd.DataFrame,
+    labels: pd.Series,
+    contamination: float = 0.05,
+    random_state: int = 42,
+) -> pd.Series:
+    """Semi-supervised anomaly detection using feedback.
+
+    Strategy:
+    - Rows marked as normal (label=0) are used to fit the model.
+    - Rows marked as anomaly (label=1) are excluded from training.
+    - Unlabeled rows (label=-1) are included in training.
+    - Scores are computed for ALL rows.
+    """
+    # Training set: exclude confirmed anomalies
+    train_mask = labels != 1
+    train_data = data.loc[train_mask]
+
+    model = IsolationForest(
+        contamination=contamination,
+        random_state=random_state,
+        n_estimators=150,
+    )
+    model.fit(train_data)
+
+    # Score all rows
+    scores = -model.decision_function(data)
     return pd.Series(scores, index=data.index, name="anomaly_score")
