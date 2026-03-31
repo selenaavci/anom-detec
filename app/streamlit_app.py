@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
 
-# Ensure the project root is on sys.path so imports work on Streamlit Cloud
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
@@ -11,12 +10,10 @@ from app.logic.file_loader import load_file
 from app.logic.preprocessing import detect_column_types, preprocess
 from app.logic.anomaly_model import detect_anomalies, MODELS
 
-# ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Anomaly Detection", page_icon="🔍", layout="wide")
 st.title("Anomaly Detection Agent")
 st.markdown("Veri setinizi yükleyin, sütunları seçin ve anomali tespiti çalıştırın.")
 
-# ── Sidebar ──────────────────────────────────────────────────────────────────
 st.sidebar.header("Ayarlar")
 
 model_display = st.sidebar.selectbox("Model", list(MODELS.keys()))
@@ -39,7 +36,6 @@ top_n = st.sidebar.slider(
     step=5,
 )
 
-# ── File upload ──────────────────────────────────────────────────────────────
 st.header("1. Veri Yükleme")
 uploaded_file = st.file_uploader(
     "CSV veya Excel dosyası yükleyin",
@@ -54,7 +50,7 @@ df = load_file(uploaded_file)
 if df is None:
     st.stop()
 
-# ── Data preview ─────────────────────────────────────────────────────────────
+
 st.header("2. Veri Önizleme")
 
 col1, col2, col3 = st.columns(3)
@@ -78,7 +74,7 @@ with st.expander("Veri tipleri ve istatistikler"):
     with tab2:
         st.dataframe(df.describe(), use_container_width=True)
 
-# ── Column selection ─────────────────────────────────────────────────────────
+
 st.header("3. Sütun Seçimi")
 
 col_types = detect_column_types(df)
@@ -105,7 +101,7 @@ if not selected_columns:
     st.warning("En az bir sütun seçmelisiniz.")
     st.stop()
 
-# ── Run detection ────────────────────────────────────────────────────────────
+
 st.header("4. Anomali Tespiti")
 
 if st.button("Anomali Tespiti Çalıştır", type="primary", use_container_width=True):
@@ -113,7 +109,6 @@ if st.button("Anomali Tespiti Çalıştır", type="primary", use_container_width
         processed, scaler = preprocess(df, selected_columns)
         scores = detect_anomalies(processed, model_name=model_key, contamination=contamination)
 
-    # Attach results to original dataframe
     result_df = df.copy()
     result_df["anomaly_score"] = scores
     result_df = result_df.sort_values("anomaly_score", ascending=False)
@@ -122,14 +117,13 @@ if st.button("Anomali Tespiti Çalıştır", type="primary", use_container_width
     st.session_state["result_df"] = result_df
     st.session_state["scores"] = scores
 
-# ── Results ──────────────────────────────────────────────────────────────────
+
 if "result_df" in st.session_state:
     result_df = st.session_state["result_df"]
     scores = st.session_state["scores"]
 
     st.header("5. Sonuçlar")
 
-    # Summary metrics
     threshold = scores.quantile(1 - contamination)
     n_anomalies = int((scores >= threshold).sum())
 
@@ -138,7 +132,6 @@ if "result_df" in st.session_state:
     m2.metric("Tespit Edilen Anomali", n_anomalies)
     m3.metric("Anomali Oranı", f"%{n_anomalies / len(result_df) * 100:.1f}")
 
-    # Score distribution
     st.subheader("Anomali Skor Dağılımı")
     import plotly.express as px
 
@@ -153,7 +146,6 @@ if "result_df" in st.session_state:
                   annotation_text="Eşik Değer")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Top anomalies table
     st.subheader(f"En Şüpheli {top_n} Kayıt")
     top_anomalies = result_df.head(top_n)
     st.dataframe(
@@ -162,7 +154,6 @@ if "result_df" in st.session_state:
         hide_index=True,
     )
 
-    # Detail inspection
     st.subheader("Kayıt Detay İnceleme")
     selected_rank = st.selectbox(
         "İncelemek istediğiniz kaydın sırasını seçin",
@@ -172,7 +163,6 @@ if "result_df" in st.session_state:
     row = top_anomalies[top_anomalies["rank"] == selected_rank].iloc[0]
     st.json(row.to_dict())
 
-    # Download
     st.subheader("Sonuçları İndir")
 
     csv_data = result_df.to_csv(index=False).encode("utf-8")
