@@ -188,7 +188,6 @@ After user feedback, the model is retrained:
 - Human feedback loop (true anomaly / false alarm)
 - Semi-supervised retraining based on feedback
 - Download results as Excel with neon yellow highlighted anomaly rows
-- Non-technical Turkish UI
 
 ---
 
