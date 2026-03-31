@@ -31,24 +31,14 @@ st.set_page_config(page_title="Anomaly Detection", page_icon="🔍", layout="wid
 st.title("Anomaly Detection Agent")
 st.markdown("Veri setinizi yükleyin, sütunları seçin ve olağandışı kayıtları tespit edin.")
 
-# ── Sidebar — Preset + Settings ──────────────────────────────────────────────
-st.sidebar.header("Senaryo Seçimi")
-
-preset_name = st.sidebar.selectbox("Örnek Senaryolar", list(PRESETS.keys()))
-preset = PRESETS[preset_name]
-
-st.sidebar.info(preset["description"])
-for tip in preset["tips"]:
-    st.sidebar.markdown(f"- {tip}")
-
-st.sidebar.divider()
+# ── Sidebar — Settings + Tips ─────────────────────────────────────────────────
 st.sidebar.header("Ayarlar")
 
 contamination = st.sidebar.slider(
     "Beklenen Anomali Oranı",
     min_value=0.01,
     max_value=0.50,
-    value=preset["contamination"],
+    value=0.05,
     step=0.01,
     help="Veri setinde yaklaşık ne kadar olağandışı kayıt bekliyorsunuz?",
 )
@@ -60,6 +50,16 @@ top_n = st.sidebar.slider(
     value=20,
     step=5,
 )
+
+st.sidebar.divider()
+st.sidebar.header("İpuçları")
+preset_name = st.sidebar.selectbox("Veri seti türünüz", list(PRESETS.keys()))
+preset = PRESETS[preset_name]
+
+tip_text = f"**{preset['description']}**\n\n"
+for tip in preset["tips"]:
+    tip_text += f"- {tip}\n"
+st.sidebar.info(tip_text)
 
 # ── 1. File upload ───────────────────────────────────────────────────────────
 st.header("1. Veri Yükleme")
