@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
 from app.logic.file_loader import load_file
 from app.logic.preprocessing import (
@@ -14,12 +15,13 @@ from app.logic.preprocessing import (
     analyze_column_quality,
     get_safe_columns,
     preprocess,
-    compute_feature_contributions,
 )
 from app.logic.anomaly_model import (
-    detect_anomalies,
-    get_top_contributing_features,
+    benchmark_models,
+    get_top_deviating_features,
+    detect_temporal_anomalies,
     run_semi_supervised,
+    MODEL_DESCRIPTIONS,
     MODELS,
 )
 from app.logic.presets import PRESETS
@@ -27,7 +29,7 @@ from app.logic.presets import PRESETS
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(page_title="Anomaly Detection", page_icon="🔍", layout="wide")
 st.title("Anomaly Detection Agent")
-st.markdown("Veri setinizi yükleyin, sütunları seçin ve anomali tespiti çalıştırın.")
+st.markdown("Veri setinizi yükleyin, sütunları seçin ve olağandışı kayıtları tespit edin.")
 
 # ── Sidebar — Preset + Settings ──────────────────────────────────────────────
 st.sidebar.header("Senaryo Seçimi")
@@ -40,23 +42,19 @@ for tip in preset["tips"]:
     st.sidebar.markdown(f"- {tip}")
 
 st.sidebar.divider()
-st.sidebar.header("Model Ayarları")
-
-default_model_idx = list(MODELS.values()).index(preset["model"]) if preset["model"] in MODELS.values() else 0
-model_display = st.sidebar.selectbox("Model", list(MODELS.keys()), index=default_model_idx)
-model_key = MODELS[model_display]
+st.sidebar.header("Ayarlar")
 
 contamination = st.sidebar.slider(
-    "Kontaminasyon Orani",
+    "Beklenen Anomali Oranı",
     min_value=0.01,
     max_value=0.50,
     value=preset["contamination"],
     step=0.01,
-    help="Veri setindeki tahmini anomali yüzdesi",
+    help="Veri setinde yaklaşık ne kadar olağandışı kayıt bekliyorsunuz?",
 )
 
 top_n = st.sidebar.slider(
-    "Gösterilecek Üst Anomali Sayısı",
+    "Gösterilecek Şüpheli Kayıt Sayısı",
     min_value=5,
     max_value=100,
     value=20,
@@ -93,7 +91,7 @@ with st.expander("Veri tipleri ve istatistikler"):
     tab1, tab2 = st.tabs(["Veri Tipleri", "İstatistikler"])
     with tab1:
         dtype_df = pd.DataFrame({
-            "Sutun": df.columns,
+            "Sütun": df.columns,
             "Tip": df.dtypes.astype(str).values,
             "Eksik": df.isna().sum().values,
             "Benzersiz": df.nunique().values,
@@ -109,19 +107,13 @@ quality_df = analyze_column_quality(df)
 
 flagged = quality_df[quality_df["flags"] != "-"]
 if not flagged.empty:
-    st.warning(f"{len(flagged)} sütunda kalite uyarısı tespit edildi.")
-    with st.expander("Kalite uyarıları (detay)", expanded=True):
-        flag_display = flagged[["column", "dtype", "unique", "unique_ratio", "missing_pct", "flags"]].copy()
-        flag_display.columns = ["Sütun", "Tip", "Benzersiz", "Benzersiz Oranı", "Eksik %", "Uyarı"]
-        st.dataframe(flag_display, use_container_width=True, hide_index=True)
-
-        st.markdown("""
-        **Uyarı türleri:**
-        - **id_like**: Benzersiz değer oranı cok yüksek — muhtemelen ID sütunu
-        - **constant**: Tek bir değer içeriyor — analiz için bilgi taşımaz
-        - **free_text**: Serbest metin alanı — anomali tespitine uygun değil
-        - **high_cardinality**: Çok fazla kategori — frequency encoding uygulanacak
-        """)
+    st.info(
+        f"Bazı sütunlarda öneriler tespit edildi. "
+        f"Bu sütunları yine de kullanabilirsiniz, ancak sonuçları etkileyebilir."
+    )
+    with st.expander("Sütun önerileri (detay)"):
+        for _, frow in flagged.iterrows():
+            st.markdown(f"- **{frow['column']}**: {frow['flag_reasons']}")
 else:
     st.success("Tüm sütunlar kalite kontrolünden geçti.")
 
@@ -140,11 +132,13 @@ st.markdown(
     f"**Kategorik sütunlar:** {len(col_types['categorical'])}"
 )
 
-st.warning(
-    "ID içeren sütunlar, serbest metin alanlarını ve sabit değerli sütunları "
-    "seçime dahil etmemeye dikkat edin. Bu tür sütunlar analiz sonuçlarını olumsuz etkiler."
-)
+if col_types["datetime"]:
+    st.markdown(f"**Tarih sütunları:** {', '.join(col_types['datetime'])}")
 
+st.info(
+    "Analiz için anlamlı sütunları seçin. ID numaraları, serbest metin gibi sütunlar "
+    "sonuçların doğruluğunu azaltabilir. Önerilen sütunlar otomatik seçilmiştir."
+)
 
 safe_columns = get_safe_columns(quality_df)
 safe_defaults = [c for c in safe_columns if c in all_usable]
@@ -159,20 +153,37 @@ if not selected_columns:
     st.warning("En az bir sütun seçmelisiniz.")
     st.stop()
 
+# Soft warning for flagged columns
 selected_flagged = flagged[flagged["column"].isin(selected_columns)]
 if not selected_flagged.empty:
-    cols_str = ", ".join(selected_flagged["column"].tolist())
-    st.error(f"Uyarı: Seçtiğiniz şu sütunlar kalite kontrolünden geçemedi: **{cols_str}**. Çıkarmak isteyebilirsiniz.")
+    cols_list = selected_flagged["column"].tolist()
+    st.info(
+        f"Seçtiğiniz **{', '.join(cols_list)}** sütun(lar)ı için önerilerimiz var. "
+        f"Kullanmaya devam edebilirsiniz, sonuçları inceledikten sonra çıkarmayı deneyebilirsiniz."
+    )
 
-# ── 5. Run detection ─────────────────────────────────────────────────────────
+# ── 5. Run detection (benchmark all models) ─────────────────────────────────
 st.header("5. Anomali Tespiti")
 
-if st.button("Anomali Tespiti Çalıştır", type="primary", use_container_width=True):
-    with st.spinner("Veri işleniyor ve model çalıştırılıyor..."):
+st.markdown(
+    "Sistem üç farklı yöntemi otomatik olarak çalıştırır, karşılaştırır ve "
+    "verilerinize en uygun olanını seçer."
+)
+
+if st.button("Analizi Başlat", type="primary", use_container_width=True):
+    with st.spinner("Veri hazırlanıyor ve modeller çalıştırılıyor..."):
         processed, scaler, feature_names = preprocess(df, selected_columns)
-        scores, fitted_model = detect_anomalies(processed, model_name=model_key, contamination=contamination)
-        contributions = compute_feature_contributions(processed, df, selected_columns)
-        
+        bench_results, best_key = benchmark_models(processed, contamination=contamination)
+
+    st.session_state["processed"] = processed
+    st.session_state["feature_names"] = feature_names
+    st.session_state["bench_results"] = bench_results
+    st.session_state["best_key"] = best_key
+
+    # Use best model's scores
+    best_result = next(r for r in bench_results if r["model_key"] == best_key)
+    scores = pd.Series(best_result["scores"], index=processed.index, name="anomaly_score")
+
     result_df = df.copy()
     result_df["anomaly_score"] = scores
     result_df = result_df.sort_values("anomaly_score", ascending=False)
@@ -180,44 +191,63 @@ if st.button("Anomali Tespiti Çalıştır", type="primary", use_container_width
 
     st.session_state["result_df"] = result_df
     st.session_state["scores"] = scores
-    st.session_state["processed"] = processed
-    st.session_state["feature_names"] = feature_names
-    st.session_state["contributions"] = contributions
+    st.session_state["selected_columns"] = selected_columns
 
     if "feedback" not in st.session_state:
         st.session_state["feedback"] = {}
 
-# ── 6. Results ───────────────────────────────────────────────────────────────
-if "result_df" not in st.session_state:
+# ── 6. Benchmark results ────────────────────────────────────────────────────
+if "bench_results" not in st.session_state:
     st.stop()
 
+bench_results = st.session_state["bench_results"]
+best_key = st.session_state["best_key"]
 result_df = st.session_state["result_df"]
 scores = st.session_state["scores"]
 processed = st.session_state["processed"]
-feature_names = st.session_state["feature_names"]
-contributions = st.session_state["contributions"]
+sel_columns = st.session_state["selected_columns"]
 
-st.header("6. Sonuçlar")
+st.header("6. Model Karşılaştırması")
+
+best_display = [k for k, v in MODELS.items() if v == best_key][0]
+st.success(f"En uygun model otomatik seçildi: **{best_display}**")
+
+bench_rows = []
+for r in bench_results:
+    display_name = [k for k, v in MODELS.items() if v == r["model_key"]][0]
+    bench_rows.append({
+        "Model": display_name,
+        "Açıklama": MODEL_DESCRIPTIONS[r["model_key"]],
+        "Bulunan Anomali": r["n_anomalies"] if r["success"] else "-",
+        "Uyum Skoru": r["silhouette"] if r["success"] else "-",
+        "Seçildi": "✓" if r["model_key"] == best_key else "",
+    })
+st.dataframe(pd.DataFrame(bench_rows), use_container_width=True, hide_index=True)
+
+# ── 7. Results ───────────────────────────────────────────────────────────────
+st.header("7. Sonuçlar")
 
 threshold = scores.quantile(1 - contamination)
 n_anomalies = int((scores >= threshold).sum())
 
 m1, m2, m3 = st.columns(3)
 m1.metric("Toplam Kayıt", len(result_df))
-m2.metric("Tespit Edilen Anomali", n_anomalies)
-m3.metric("Anomali Oranı", f"%{n_anomalies / len(result_df) * 100:.1f}")
+m2.metric("Şüpheli Kayıt", n_anomalies)
+m3.metric("Şüpheli Oranı", f"%{n_anomalies / len(result_df) * 100:.1f}")
 
-st.subheader("Anomali Skor Dağılımı")
+# Score distribution — simplified labels
+st.subheader("Şüphelilik Dağılımı")
 fig = px.histogram(
     result_df,
     x="anomaly_score",
     nbins=50,
-    title="Anomali Skorları Dağılımı",
-    labels={"anomaly_score": "Anomali Skoru", "count": "Kayıt Sayısı"},
+    labels={"anomaly_score": "Şüphelilik Puanı", "count": "Kayıt Sayısı"},
 )
-fig.add_vline(x=threshold, line_dash="dash", line_color="red", annotation_text="Eşik Değer")
+fig.add_vline(x=threshold, line_dash="dash", line_color="red", annotation_text="Eşik")
+fig.update_layout(title=None)
 st.plotly_chart(fig, use_container_width=True)
 
+# Top anomalies table
 st.subheader(f"En Şüpheli {top_n} Kayıt")
 top_anomalies = result_df.head(top_n)
 st.dataframe(
@@ -226,53 +256,129 @@ st.dataframe(
     hide_index=True,
 )
 
-# ── 7. Detail inspection + Feature contributions ────────────────────────────
-st.header("7. Kayıt Detay İnceleme ve Feature Analizi")
+# ── 8. Detail inspection — non-technical ─────────────────────────────────────
+st.header("8. Kayıt İnceleme")
+st.markdown("Bir kaydı seçerek neden şüpheli bulunduğunu inceleyin.")
 
 selected_rank = st.selectbox(
-    "İncelemek istediğiniz kaydın sırasını seçin",
+    "İncelemek istediğiniz kaydı seçin",
     options=top_anomalies["rank"].tolist(),
-    format_func=lambda x: f"Sira {x} — Skor: {top_anomalies.loc[top_anomalies['rank'] == x, 'anomaly_score'].values[0]:.4f}",
+    format_func=lambda x: f"Sıra {x} — Şüphelilik: {top_anomalies.loc[top_anomalies['rank'] == x, 'anomaly_score'].values[0]:.2f}",
 )
 
 row_mask = top_anomalies["rank"] == selected_rank
 original_idx = top_anomalies.loc[row_mask].index[0]
 row = top_anomalies.loc[row_mask].iloc[0]
 
-detail_col, contrib_col = st.columns(2)
+detail_col, reason_col = st.columns(2)
 
 with detail_col:
-    st.subheader("Kayıt Detayı")
+    st.subheader("Kayıt Bilgileri")
     row_dict = row.drop(["anomaly_score", "rank"]).to_dict()
-    st.json(row_dict)
+    display_items = []
+    for k, v in row_dict.items():
+        display_items.append({"Alan": k, "Değer": v})
+    st.dataframe(pd.DataFrame(display_items), use_container_width=True, hide_index=True)
 
-with contrib_col:
-    st.subheader("En Etkili Özellikler")
-    st.caption("Yüksek z-skoru, o özelliğin normalden ne kadar saptığını gösterir.")
-    if original_idx in processed.index:
-        processed_row = processed.loc[original_idx]
-        top_features = get_top_contributing_features(processed_row, top_k=8)
+with reason_col:
+    st.subheader("Neden Şüpheli?")
+    st.markdown("Bu kaydın diğer kayıtlardan en çok farklılaştığı alanlar:")
 
-        fig_bar = px.bar(
-            top_features,
-            x="z_score",
-            y="feature",
-            color="direction",
-            orientation="h",
-            title="Z-Score ile Özellik Katkıları",
-            labels={"z_score": "|Z-Score|", "feature": "Özellik", "direction": "Yön"},
-            color_discrete_map={"+": "#EF553B", "-": "#636EFA"},
-        )
-        fig_bar.update_layout(yaxis={"categoryorder": "total ascending"}, height=350)
-        st.plotly_chart(fig_bar, use_container_width=True)
+    deviations = get_top_deviating_features(row, df, sel_columns, top_k=5)
+    if not deviations.empty:
+        for _, d in deviations.iterrows():
+            diff_pct = d["deviation"]
+            direction = "yüksek" if d["value"] > d["typical"] else "düşük"
+            st.markdown(
+                f"- **{d['feature']}**: Değeri **{d['value']:.2f}**, "
+                f"tipik değer **{d['typical']:.2f}** — normalden **{diff_pct:.1f}x** daha {direction}"
+            )
     else:
-        st.info("Bu kayıt için feature analizi mevcut değil.")
+        st.info("Bu kayıt için sayısal karşılaştırma yapılamadı.")
 
-# ── 8. Feedback loop ─────────────────────────────────────────────────────────
-st.header("8. Geri Bildirim")
+# ── 9. Temporal anomaly ──────────────────────────────────────────────────────
+datetime_cols = col_types["datetime"]
+numeric_cols_for_ts = [c for c in sel_columns if c in col_types["numeric"]]
+
+if datetime_cols and numeric_cols_for_ts:
+    st.header("9. Zaman Serisi Analizi")
+    st.markdown(
+        "Verilerinizde tarih sütunu tespit edildi. Zaman içindeki olağandışı değişimleri "
+        "aşağıda inceleyebilirsiniz."
+    )
+
+    ts_col1, ts_col2 = st.columns(2)
+    with ts_col1:
+        ts_date_col = st.selectbox("Tarih sütunu", datetime_cols)
+    with ts_col2:
+        ts_value_col = st.selectbox("İncelenecek değer sütunu", numeric_cols_for_ts)
+
+    ts_window = st.slider("Hareketli ortalama penceresi (gün)", 3, 60, 14)
+
+    if st.button("Zaman Serisi Analizi Çalıştır", use_container_width=True):
+        with st.spinner("Zaman serisi analiz ediliyor..."):
+            ts_result = detect_temporal_anomalies(df, ts_date_col, ts_value_col, window=ts_window)
+
+        n_ts_anomalies = int(ts_result["is_anomaly"].sum())
+        st.metric("Zaman Serisinde Şüpheli Nokta", n_ts_anomalies)
+
+        fig_ts = go.Figure()
+        # Normal points
+        normal_ts = ts_result[~ts_result["is_anomaly"]]
+        fig_ts.add_trace(go.Scatter(
+            x=normal_ts[ts_date_col], y=normal_ts[ts_value_col],
+            mode="markers", name="Normal", marker=dict(color="#636EFA", size=4),
+        ))
+        # Anomaly points
+        anom_ts = ts_result[ts_result["is_anomaly"]]
+        fig_ts.add_trace(go.Scatter(
+            x=anom_ts[ts_date_col], y=anom_ts[ts_value_col],
+            mode="markers", name="Şüpheli", marker=dict(color="#EF553B", size=10, symbol="x"),
+        ))
+        # Rolling mean
+        fig_ts.add_trace(go.Scatter(
+            x=ts_result[ts_date_col], y=ts_result["rolling_mean"],
+            mode="lines", name="Ortalama Trend", line=dict(color="gray", dash="dash"),
+        ))
+        # Band
+        fig_ts.add_trace(go.Scatter(
+            x=ts_result[ts_date_col], y=ts_result["upper"],
+            mode="lines", name="Üst Sınır", line=dict(color="rgba(200,200,200,0.5)"),
+        ))
+        fig_ts.add_trace(go.Scatter(
+            x=ts_result[ts_date_col], y=ts_result["lower"],
+            mode="lines", name="Alt Sınır", line=dict(color="rgba(200,200,200,0.5)"),
+            fill="tonexty", fillcolor="rgba(200,200,200,0.15)",
+        ))
+        fig_ts.update_layout(
+            xaxis_title="Tarih",
+            yaxis_title=ts_value_col,
+            height=450,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        )
+        st.plotly_chart(fig_ts, use_container_width=True)
+
+        if n_ts_anomalies > 0:
+            st.subheader("Şüpheli Zaman Noktaları")
+            st.dataframe(
+                anom_ts[[ts_date_col, ts_value_col, "rolling_mean"]].rename(columns={
+                    ts_date_col: "Tarih",
+                    ts_value_col: "Değer",
+                    "rolling_mean": "Beklenen Değer",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+    section_offset = 10
+else:
+    section_offset = 9
+
+# ── Feedback loop ────────────────────────────────────────────────────────────
+st.header(f"{section_offset}. Geri Bildirim")
 st.markdown(
-    "Tespit edilen anomalileri **gerçek anomali** veya **yanlış alarm** olarak işaretleyin. "
-    "Yeterli geri bildirim toplandıktan sonra yarı gözetimli modeli çalıştırabilirsiniz."
+    "Tespit edilen kayıtları **gerçek anomali** veya **yanlış alarm** olarak işaretleyin. "
+    "Geri bildirimleriniz modeli iyileştirmek için kullanılabilir."
 )
 
 if "feedback" not in st.session_state:
@@ -284,14 +390,14 @@ for rank_val in feedback_ranks[:top_n]:
     score_val = top_anomalies.loc[top_anomalies["rank"] == rank_val, "anomaly_score"].values[0]
 
     col_label, col_btn1, col_btn2, col_status = st.columns([3, 2, 2, 2])
-    col_label.markdown(f"**Sira {rank_val}** — Skor: {score_val:.4f}")
+    col_label.markdown(f"**Sıra {rank_val}** — Puan: {score_val:.2f}")
 
     current_fb = st.session_state["feedback"].get(idx, None)
 
     if col_btn1.button("Gerçek Anomali", key=f"anom_{idx}"):
         st.session_state["feedback"][idx] = 1
         current_fb = 1
-    if col_btn2.button("Yanlş Alarm", key=f"normal_{idx}"):
+    if col_btn2.button("Yanlış Alarm", key=f"normal_{idx}"):
         st.session_state["feedback"][idx] = 0
         current_fb = 0
 
@@ -313,44 +419,42 @@ fb1.metric("Toplam Geri Bildirim", n_feedback)
 fb2.metric("Gerçek Anomali", n_marked_anomaly)
 fb3.metric("Yanlış Alarm", n_marked_normal)
 
-# ── 9. Semi-supervised re-run ────────────────────────────────────────────────
-st.header("9. Yarı Gözetimli Yeniden Analiz")
+# ── Semi-supervised re-run ───────────────────────────────────────────────────
+st.header(f"{section_offset + 1}. Geri Bildirimle Yeniden Analiz")
 st.markdown(
-    "Geri bildirimleriniz kullanılarak model yeniden eğitilir. "
-    "**Normal** olarak işaretlenen kayıtlar eğitim setine dahil edilir, "
-    "**Anomali** olarak işaretlenenler eğitimden çıkarılır."
+    "Geri bildirimleriniz kullanılarak model güncellenir. "
+    "Normal olarak işaretlediğiniz kayıtlar modele öğretilir, "
+    "anomali dedikleriniz eğitimden çıkarılır."
 )
 
 min_feedback = 3
 if n_feedback < min_feedback:
-    st.info(f"Yarı gözetimli analiz için en az {min_feedback} geri bildirim gereklidir. Şimdilik {n_feedback} adet var.")
+    st.info(f"Yeniden analiz için en az {min_feedback} geri bildirim gerekli. Şu an {n_feedback} adet var.")
 else:
-    if st.button("Yarı Gözetimli Modeli Çalıştır", type="primary", use_container_width=True):
-        with st.spinner("Geri bildirimlerle model yeniden eğitiliyor..."):
+    if st.button("Geri Bildirimle Yeniden Analiz Et", type="primary", use_container_width=True):
+        with st.spinner("Model geri bildirimlerinizle güncelleniyor..."):
             labels = pd.Series(-1, index=processed.index)
             for idx_key, label_val in fb.items():
                 if idx_key in labels.index:
                     labels.loc[idx_key] = label_val
 
-            new_scores = run_semi_supervised(
-                processed, labels, contamination=contamination,
-            )
+            new_scores = run_semi_supervised(processed, labels, contamination=contamination)
 
         result_df_v2 = df.copy()
         result_df_v2["anomaly_score"] = new_scores
         result_df_v2 = result_df_v2.sort_values("anomaly_score", ascending=False)
         result_df_v2["rank"] = range(1, len(result_df_v2) + 1)
 
-        st.success("Yarı gözetimli analiz tamamlandı!")
+        st.success("Model güncellendi!")
 
         new_threshold = new_scores.quantile(1 - contamination)
         new_n_anomalies = int((new_scores >= new_threshold).sum())
 
         r1, r2 = st.columns(2)
-        r1.metric("Yeni Anomali Sayısı", new_n_anomalies, delta=new_n_anomalies - n_anomalies)
-        r2.metric("Yeni Eşik Değer", f"{new_threshold:.4f}")
+        r1.metric("Güncel Şüpheli Sayısı", new_n_anomalies, delta=new_n_anomalies - n_anomalies)
+        r2.metric("Değişim", f"{abs(new_n_anomalies - n_anomalies)} kayıt")
 
-        st.subheader(f"Güncellenmis En Şüpheli {top_n} Kayıt")
+        st.subheader(f"Güncellenmiş En Şüpheli {top_n} Kayıt")
         st.dataframe(
             result_df_v2.head(top_n).style.background_gradient(subset=["anomaly_score"], cmap="Reds"),
             use_container_width=True,
@@ -359,15 +463,15 @@ else:
 
         csv_v2 = result_df_v2.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="Güncellenmis Sonuçları CSV Olarak İndir",
+            label="Güncellenmiş Sonuçları İndir",
             data=csv_v2,
             file_name="anomaly_results_v2.csv",
             mime="text/csv",
             use_container_width=True,
         )
 
-# ── 10. Download ─────────────────────────────────────────────────────────────
-st.header("10. Sonuçları İndir")
+# ── Download ─────────────────────────────────────────────────────────────────
+st.header(f"{section_offset + 2}. Sonuçları İndir")
 
 csv_data = result_df.to_csv(index=False).encode("utf-8")
 st.download_button(
@@ -380,7 +484,7 @@ st.download_button(
 
 csv_anomalies = top_anomalies.to_csv(index=False).encode("utf-8")
 st.download_button(
-    label=f"Üst {top_n} Anomaliyi CSV Olarak İndir",
+    label=f"En Şüpheli {top_n} Kaydı İndir",
     data=csv_anomalies,
     file_name="top_anomalies.csv",
     mime="text/csv",
