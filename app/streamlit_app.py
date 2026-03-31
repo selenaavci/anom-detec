@@ -93,6 +93,8 @@ st.markdown(
     f"**Kategorik sütunlar:** {len(col_types['categorical'])}"
 )
 
+st.warning("Yalnızca ID içeren sütunları ve serbest metin alanlarını seçime dahil etmemeye dikkat edin. Bu tür sütunlar analiz sonuçlarını olumsuz etkileyebilir.")
+
 selected_columns = st.multiselect(
     "Analiz edilecek sütunları seçin",
     options=all_usable,
