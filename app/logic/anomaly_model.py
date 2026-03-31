@@ -62,7 +62,6 @@ def benchmark_models(data, contamination=0.05):
             scores = runner()
             labels = _label_from_scores(scores, contamination)
 
-            # Silhouette score — measures how well anomalies separate from normals
             n_unique = len(np.unique(labels))
             if n_unique > 1 and len(data) > 10:
                 sample_size = min(len(data), 5000)
@@ -93,7 +92,6 @@ def benchmark_models(data, contamination=0.05):
                 "error": str(e),
             })
 
-    # Pick best by silhouette score
     successful = [r for r in results if r["success"]]
     if successful:
         best = max(successful, key=lambda r: r["silhouette"])
