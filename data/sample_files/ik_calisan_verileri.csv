@@ -1,0 +1,81 @@
+calisan_id,departman,pozisyon,deneyim_yili,maas,performans_puani,devamsizlik_gun,egitim_saat,sehir
+C-001,Yazılım,Kıdemli Geliştirici,8,42000,85,3,24,İstanbul
+C-002,Pazarlama,Uzman,5,28000,78,5,16,Ankara
+C-003,Finans,Muhasebeci,3,22000,72,2,12,İzmir
+C-004,Yazılım,Geliştirici,2,25000,70,4,20,İstanbul
+C-005,İnsan Kaynakları,Uzman,6,30000,80,1,18,Ankara
+C-006,Satış,Temsilci,1,18000,65,7,8,Bursa
+C-007,Yazılım,Takım Lideri,10,55000,90,2,30,İstanbul
+C-008,Finans,Kıdemli Muhasebeci,7,35000,82,3,14,İzmir
+C-009,Pazarlama,Müdür,12,60000,88,1,22,Ankara
+C-010,Satış,Kıdemli Temsilci,4,23000,75,6,10,Antalya
+C-011,Yazılım,Geliştirici,3,27000,74,3,18,İstanbul
+C-012,İnsan Kaynakları,Müdür,15,65000,92,0,28,Ankara
+C-013,Finans,Uzman,4,26000,76,4,14,İzmir
+C-014,Satış,Temsilci,1,17500,62,8,6,Bursa
+C-015,Yazılım,Kıdemli Geliştirici,9,45000,87,2,26,İstanbul
+C-016,Pazarlama,Uzman,3,24000,71,5,12,Ankara
+C-017,Yazılım,Geliştirici,2,23500,68,4,16,İstanbul
+C-018,Finans,Muhasebeci,1,19000,64,3,10,İzmir
+C-019,Satış,Müdür,11,58000,89,1,24,Antalya
+C-020,İnsan Kaynakları,Uzman,5,29000,77,2,16,İstanbul
+C-021,Yazılım,Geliştirici,1,135000,12,42,0,İstanbul
+C-022,Finans,Muhasebeci,3,21000,73,3,12,Ankara
+C-023,Pazarlama,Temsilci,2,20000,67,6,8,İzmir
+C-024,Satış,Temsilci,1,17000,63,7,6,Bursa
+C-025,Yazılım,Takım Lideri,11,52000,91,1,32,İstanbul
+C-026,Finans,Kıdemli Muhasebeci,8,37000,84,2,16,İzmir
+C-027,Pazarlama,Uzman,4,25000,74,4,14,Ankara
+C-028,Satış,Kıdemli Temsilci,5,24000,76,5,10,Antalya
+C-029,Yazılım,Geliştirici,3,26000,72,3,18,İstanbul
+C-030,İnsan Kaynakları,Uzman,4,27000,79,2,14,Ankara
+C-031,Finans,Muhasebeci,2,20500,69,4,10,İzmir
+C-032,Satış,Temsilci,1,16500,61,9,4,Bursa
+C-033,Yazılım,Kıdemli Geliştirici,7,40000,83,3,22,İstanbul
+C-034,Pazarlama,Müdür,14,62000,90,0,26,Ankara
+C-035,Finans,Uzman,5,28000,78,3,14,İzmir
+C-036,Satış,Kıdemli Temsilci,3,22000,73,5,10,Antalya
+C-037,Yazılım,Geliştirici,2,24500,70,4,16,İstanbul
+C-038,İnsan Kaynakları,Uzman,6,31000,81,1,18,Ankara
+C-039,Pazarlama,Temsilci,1,18500,66,6,8,İzmir
+C-040,Satış,Temsilci,1,17200,64,7,6,Bursa
+C-041,Yazılım,Takım Lideri,12,57000,93,1,34,İstanbul
+C-042,Finans,Muhasebeci,3,21500,71,3,12,İzmir
+C-043,Pazarlama,Uzman,5,27000,76,4,14,Ankara
+C-044,Satış,Müdür,10,54000,86,2,20,Antalya
+C-045,Yazılım,Geliştirici,1,22000,67,5,14,İstanbul
+C-046,Finans,Kıdemli Muhasebeci,9,38000,85,2,16,Ankara
+C-047,İnsan Kaynakları,Müdür,13,63000,91,0,28,İstanbul
+C-048,Satış,Temsilci,2,19000,68,6,8,Bursa
+C-049,Yazılım,Kıdemli Geliştirici,6,38000,81,3,22,İstanbul
+C-050,Pazarlama,Uzman,4,25500,75,4,12,Ankara
+C-051,Finans,Uzman,3,23000,72,4,10,İzmir
+C-052,Satış,Kıdemli Temsilci,4,23500,74,5,10,Antalya
+C-053,Yazılım,Geliştirici,2,25000,71,3,16,İstanbul
+C-054,İnsan Kaynakları,Uzman,5,28500,78,2,16,Ankara
+C-055,Finans,Muhasebeci,1,18500,63,5,8,İzmir
+C-056,Pazarlama,Müdür,3,15000,22,35,2,İzmir
+C-057,Satış,Temsilci,1,16800,62,8,4,Bursa
+C-058,Yazılım,Takım Lideri,9,50000,88,2,28,İstanbul
+C-059,Finans,Kıdemli Muhasebeci,6,33000,80,3,14,İzmir
+C-060,Pazarlama,Uzman,3,23500,70,5,12,Ankara
+C-061,Satış,Kıdemli Temsilci,5,25000,77,4,12,Antalya
+C-062,Yazılım,Geliştirici,3,26500,73,3,18,İstanbul
+C-063,İnsan Kaynakları,Uzman,7,32000,82,1,18,Ankara
+C-064,Finans,Muhasebeci,2,20000,68,4,10,İzmir
+C-065,Satış,Temsilci,1,17500,65,7,6,Bursa
+C-066,Yazılım,Kıdemli Geliştirici,8,43000,86,2,24,İstanbul
+C-067,Pazarlama,Uzman,4,26000,74,4,14,Ankara
+C-068,Finans,Uzman,6,30000,80,3,14,İzmir
+C-069,Satış,Müdür,9,52000,85,2,18,Antalya
+C-070,Yazılım,Geliştirici,1,21000,66,5,12,İstanbul
+C-071,İnsan Kaynakları,Uzman,4,27500,76,2,14,İstanbul
+C-072,Finans,Muhasebeci,3,22500,72,3,12,Ankara
+C-073,Pazarlama,Temsilci,2,19500,67,6,8,İzmir
+C-074,Satış,Temsilci,1,16000,60,9,4,Bursa
+C-075,Yazılım,Geliştirici,4,29000,75,3,20,İstanbul
+C-076,Finans,Kıdemli Muhasebeci,7,34000,82,2,14,İzmir
+C-077,Pazarlama,Uzman,5,27500,77,4,14,Ankara
+C-078,Satış,Kıdemli Temsilci,3,21500,72,6,8,Antalya
+C-079,Yazılım,Kıdemli Geliştirici,10,48000,89,1,28,İstanbul
+C-080,İnsan Kaynakları,Müdür,16,68000,94,0,30,Ankara
