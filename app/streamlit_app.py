@@ -11,15 +11,15 @@ import plotly.graph_objects as go
 from io import BytesIO
 from openpyxl.styles import PatternFill
 
-from app.logic.file_loader import load_file
-from app.logic.preprocessing import (
+from logic.file_loader import load_file
+from logic.preprocessing import (
     detect_column_types,
     analyze_column_quality,
     detect_id_columns,
     get_safe_columns,
     preprocess,
 )
-from app.logic.anomaly_model import (
+from logic.anomaly_model import (
     benchmark_models,
     get_top_deviating_features,
     detect_temporal_anomalies,
@@ -27,7 +27,7 @@ from app.logic.anomaly_model import (
     MODEL_DESCRIPTIONS,
     MODELS,
 )
-from app.logic.presets import PRESETS
+from logic.presets import PRESETS
 
 NEON_YELLOW = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
 
@@ -39,7 +39,6 @@ def to_styled_excel(dataframe: pd.DataFrame, anomaly_threshold: float) -> bytes:
         dataframe.to_excel(writer, index=False, sheet_name="Sonuçlar")
         ws = writer.sheets["Sonuçlar"]
 
-        # Find anomaly_score column index (1-based in openpyxl)
         score_col_idx = None
         for idx, col in enumerate(dataframe.columns, start=1):
             if col == "anomaly_score":
@@ -47,7 +46,7 @@ def to_styled_excel(dataframe: pd.DataFrame, anomaly_threshold: float) -> bytes:
                 break
 
         if score_col_idx is not None:
-            for row_idx in range(2, len(dataframe) + 2):  # skip header
+            for row_idx in range(2, len(dataframe) + 2):
                 cell_value = ws.cell(row=row_idx, column=score_col_idx).value
                 if cell_value is not None and cell_value >= anomaly_threshold:
                     for col_idx in range(1, len(dataframe.columns) + 1):
@@ -94,8 +93,8 @@ st.sidebar.info(tip_text)
 # ── 1. File upload ───────────────────────────────────────────────────────────
 st.header("1. Veri Yükleme")
 uploaded_file = st.file_uploader(
-    "CSV, Excel veya ZIP dosyası yükleyin",
-    type=["csv", "xls", "xlsx", "zip"],
+    "CSV, Excel, XML veya ZIP dosyası yükleyin",
+    type=["csv", "xls", "xlsx", "xml", "zip"],
 )
 
 if uploaded_file is None:
@@ -177,7 +176,6 @@ if id_candidates:
         default=id_candidates,
     )
 
-    # Remaining ID-like columns that user didn't pick as identifier
     remaining_ids = [c for c in id_candidates if c not in selected_ids]
     if remaining_ids:
         st.info(
@@ -194,7 +192,6 @@ st.header("5. Sütun Seçimi")
 col_types = detect_column_types(df)
 all_usable = col_types["numeric"] + col_types["categorical"]
 
-# Exclude chosen identifiers from defaults but keep them in options
 non_id_usable = [c for c in all_usable if c not in selected_ids]
 
 if not all_usable:
@@ -227,7 +224,6 @@ if not selected_columns:
     st.warning("En az bir sütun seçmelisiniz.")
     st.stop()
 
-# Soft warning for flagged columns (excluding already chosen IDs)
 non_id_flagged = flagged[flagged["column"].isin(selected_columns) & ~flagged["column"].isin(selected_ids)]
 if not non_id_flagged.empty:
     cols_list = non_id_flagged["column"].tolist()
@@ -254,7 +250,6 @@ if st.button("Analizi Başlat", type="primary", use_container_width=True):
     st.session_state["bench_results"] = bench_results
     st.session_state["best_key"] = best_key
 
-    # Use best model's scores
     best_result = next(r for r in bench_results if r["model_key"] == best_key)
     scores = pd.Series(best_result["scores"], index=processed.index, name="anomaly_score")
 
@@ -311,7 +306,6 @@ m1.metric("Toplam Kayıt", len(result_df))
 m2.metric("Şüpheli Kayıt", n_anomalies)
 m3.metric("Şüpheli Oranı", f"%{n_anomalies / len(result_df) * 100:.1f}")
 
-# Score distribution — simplified labels
 st.subheader("Şüphelilik Dağılımı")
 fig = px.histogram(
     result_df,
@@ -323,11 +317,9 @@ fig.add_vline(x=threshold, line_dash="dash", line_color="red", annotation_text="
 fig.update_layout(title=None)
 st.plotly_chart(fig, use_container_width=True)
 
-# Top anomalies table — ID columns first for reference
 st.subheader(f"En Şüpheli {top_n} Kayıt")
 top_anomalies = result_df.head(top_n)
 
-# Reorder columns: IDs first, then anomaly_score + rank, then rest
 if sel_ids:
     id_cols_present = [c for c in sel_ids if c in top_anomalies.columns]
     other_cols = [c for c in top_anomalies.columns if c not in id_cols_present]
@@ -368,7 +360,6 @@ detail_col, reason_col = st.columns(2)
 
 with detail_col:
     st.subheader("Kayıt Bilgileri")
-    # Show ID fields at top if available
     if sel_ids:
         id_values = {c: row[c] for c in sel_ids if c in row.index}
         if id_values:
@@ -424,24 +415,20 @@ if datetime_cols and numeric_cols_for_ts:
         st.metric("Zaman Serisinde Şüpheli Nokta", n_ts_anomalies)
 
         fig_ts = go.Figure()
-        # Normal points
         normal_ts = ts_result[~ts_result["is_anomaly"]]
         fig_ts.add_trace(go.Scatter(
             x=normal_ts[ts_date_col], y=normal_ts[ts_value_col],
             mode="markers", name="Normal", marker=dict(color="#636EFA", size=4),
         ))
-        # Anomaly points
         anom_ts = ts_result[ts_result["is_anomaly"]]
         fig_ts.add_trace(go.Scatter(
             x=anom_ts[ts_date_col], y=anom_ts[ts_value_col],
             mode="markers", name="Şüpheli", marker=dict(color="#EF553B", size=10, symbol="x"),
         ))
-        # Rolling mean
         fig_ts.add_trace(go.Scatter(
             x=ts_result[ts_date_col], y=ts_result["rolling_mean"],
             mode="lines", name="Ortalama Trend", line=dict(color="gray", dash="dash"),
         ))
-        # Band
         fig_ts.add_trace(go.Scatter(
             x=ts_result[ts_date_col], y=ts_result["upper"],
             mode="lines", name="Üst Sınır", line=dict(color="rgba(200,200,200,0.5)"),
@@ -485,6 +472,11 @@ st.markdown(
 if "feedback" not in st.session_state:
     st.session_state["feedback"] = {}
 
+
+def _mark_feedback(record_idx, label_value: int) -> None:
+    st.session_state["feedback"][record_idx] = label_value
+
+
 feedback_ranks = top_anomalies["rank"].tolist()
 for rank_val in feedback_ranks[:top_n]:
     idx = top_anomalies.loc[top_anomalies["rank"] == rank_val].index[0]
@@ -495,12 +487,18 @@ for rank_val in feedback_ranks[:top_n]:
 
     current_fb = st.session_state["feedback"].get(idx, None)
 
-    if col_btn1.button("Gerçek Anomali", key=f"anom_{idx}"):
-        st.session_state["feedback"][idx] = 1
-        current_fb = 1
-    if col_btn2.button("Yanlış Alarm", key=f"normal_{idx}"):
-        st.session_state["feedback"][idx] = 0
-        current_fb = 0
+    col_btn1.button(
+        "Gerçek Anomali",
+        key=f"anom_{idx}",
+        on_click=_mark_feedback,
+        args=(idx, 1),
+    )
+    col_btn2.button(
+        "Yanlış Alarm",
+        key=f"normal_{idx}",
+        on_click=_mark_feedback,
+        args=(idx, 0),
+    )
 
     if current_fb == 1:
         col_status.success("Anomali")

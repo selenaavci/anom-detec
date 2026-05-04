@@ -83,14 +83,12 @@ def detect_id_columns(df: pd.DataFrame, quality_df: pd.DataFrame) -> list[str]:
     """
     id_cols = set()
 
-    # Name-based: "id", "ID", "_id", "Id", columns ending/starting with id
     import re
     id_pattern = re.compile(r'(?:^|[_\- ])id(?:[_\- ]|$)|^id$|_id$|Id$|ID$|^id_|^ID_', re.IGNORECASE)
     for col in df.columns:
         if id_pattern.search(col):
             id_cols.add(col)
 
-    # Quality-based: flagged as id_like
     flagged_ids = quality_df.loc[quality_df["flags"].str.contains("id_like", na=False), "column"].tolist()
     id_cols.update(flagged_ids)
 
