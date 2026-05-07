@@ -1,367 +1,259 @@
-# Anomaly Detection Agent
-
-A Streamlit-based internal anomaly detection application that allows users to upload their own datasets, detect potentially anomalous records using classical machine learning methods, and review the most suspicious observations through an interactive interface.
-
----
+# 🔍 Anomaly Detection Agent
 
 ## Project Overview
+Anomaly Detection Agent, kullanıcı tarafından yüklenen veri setleri üzerinde **otomatik anomali tespiti** yaparak, olağandışı kayıtları **iş birimi tarafından incelenebilir bir formatta** sunmak üzere tasarlanmış bir analiz modülüdür.
 
-This project is designed for internal company use and enables non-technical or semi-technical users to upload structured datasets and run anomaly detection without needing to build a model from scratch.
+Klasik makine öğrenmesi (Isolation Forest, Local Outlier Factor, One-Class SVM) ile üç model paralel çalıştırılır; sonuçları **ensemble** edilerek tek bir modelin zayıf olduğu anomali türlerinin gözden kaçması engellenir. Her kayıt için anomali skoru üretilir, sapma açıklamaları çıkarılır (sayısal + kategorik + kombinasyon + kural ihlali) ve sonuçlar Excel raporu olarak indirilebilir. Kullanıcı geri bildirimleri **oturumlar arası kalıcı** olarak saklanır ve preset model ağırlıklarının zaman içinde iyileşmesinde kullanılır.
 
-The application is built entirely with traditional data processing and machine learning components. Users can upload their own files, preview the data, select relevant columns, run anomaly detection with automatic model selection, inspect the most suspicious records, and provide feedback to improve results.
-
-The UI is developed with Streamlit to provide a simple and accessible user experience. All interface elements are designed for users without technical ML knowledge.
-
-A future second phase may introduce an LLM layer for natural language explanations, guided column selection, and conversational interpretation of results. However, the current version does not depend on any LLM.
+> ⚠️ **LLM entegrasyonu şu an aktif değildir.** Mevcut versiyon tamamen klasik ML üzerine kuruludur. İleride doğal dil açıklama katmanı (Phase 2) eklenmek üzere planlanmıştır.
 
 ---
 
-## Goals
+## 🎯 Project Purpose
+Ham veri setlerinden olağandışı kayıtları çıkararak, bu kayıtları iş diliyle anlaşılabilir hale getirmek ve kurum içinde **denetim, risk yönetimi ve operasyonel kalite süreçlerinin hızlanmasını sağlamak**.
 
-- Enable users to upload their own tabular data and analyze it easily
-- Detect unusual or suspicious observations using classical ML algorithms
-- Automatically select the best model for the given dataset
-- Provide a lightweight and interactive Streamlit interface for internal use
-- Support human review by surfacing the top anomalous records
-- Allow users to provide feedback and improve detection with semi-supervised learning
-- Create a scalable baseline architecture that can later be extended with LLM-powered explanations
+Skor üretmenin ötesine geçerek, her şüpheli kayıt için **hangi alanların ne kadar saptığını**, **hangi değerlerin nadir olduğunu** ve **hangi kuralların ihlal edildiğini** göstermek; kullanıcı geri bildirimini modele geri besleyerek **iyileştirme döngüsü** kurmak hedeflenir.
 
 ---
 
-## Scope
+## 👥 Target Use Cases
 
-### Included in this version
+### 1. Financial Transaction Monitoring
+- Ödeme, fatura, banka işlemleri üzerinde olağandışı tutar/davranış tespiti
+- Sigorta tazminat taleplerinde sahte/aşırı kayıt analizi
+- Mutabakat raporlarında tutarsız satır tespiti
 
-- Dataset upload through Streamlit (CSV, Excel, ZIP)
-- Maximum upload size: 1 GB
-- Basic data inspection and preview
-- Automatic column quality analysis and recommendations
-- ID column detection and identifier selection
-- Data preprocessing with OneHotEncoding and frequency encoding
-- Three classical ML models with automatic benchmarking and selection
-- Time series anomaly detection for datasets with date columns
-- Ranking and displaying anomalous observations
-- Feature-level deviation explanations for each suspicious record
-- Human feedback loop (true anomaly / false alarm)
-- Semi-supervised retraining based on user feedback
-- Excel export with neon yellow highlighting on anomaly rows
-- Preset scenario configurations for common dataset types
-- Manual review of suspicious rows
+### 2. HR & Workforce Analytics
+- Maaş, performans ve devam kayıtlarında uç değer tespiti
+- Çalışan davranışında ani değişim analizi
+- Eğitim katılım anomalilerinin tespiti
 
-### Not included in this version
-
-- LLM integration
-- Natural language chat interface
-- Automated root-cause explanations
-- Supervised anomaly models
-- Feedback persistence across sessions
+### 3. Operational Quality Control
+- Çağrı merkezi süre/bekleme/memnuniyet metriklerinde sapma analizi
+- Üretim/sensör loglarında olağandışı davranış tespiti
+- Veri kalitesi denetiminde kuraldışı kayıt tespiti
 
 ---
 
-## Why Classical Machine Learning?
+## ⚙️ End-to-End Workflow
 
-Anomaly detection is often a better fit for classical ML than LLM-based architectures, especially in early stages.
+1. **Data Upload**
+   Kullanıcı CSV, Excel (XLS/XLSX), XML veya ZIP dosyasını yükler. Maksimum upload boyutu 1 GB.
 
-Advantages:
+2. **Automatic Data Analysis**
+   Sistem veri tiplerini otomatik analiz eder:
+   - Sayısal kolonlar (ad ve içerik bazlı sezgi)
+   - Kategorik kolonlar
+   - Tarih alanları
+   - ID benzeri ve anlamsız kolonlar
 
-- Lower complexity
-- Faster implementation
-- Easier deployment in internal environments
-- Lower operational cost
-- More predictable behavior
-- No dependency on external AI services
+3. **Column Type Control (Yeni)**
+   Sistem her kolonu otomatik tipler; kullanıcı yanlış algılananları açılır listeden değiştirir:
+   - `Sayısal/Tutar`, `Kategorik/Metin`, `Tarih`, `ID/Referans`, `Analiz dışı`
+   - Sayısal'a çevrilen kolonlar için **dönüşüm raporu**: kaç değer çevrildi, kaç değer çevrilemedi, çevrilemeyen örnekler
+   - Türkçe ondalık (`1.234,56`), kontrol karakteri (`\n\t\r`), para birimi sembolleri otomatik temizlenir
 
----
+4. **Column Quality Analysis**
+   Her kolon için kalite işaretleri çıkarılır:
+   - `id_like`: yüksek benzersizlik oranı
+   - `constant`: tek değerli kolon
+   - `free_text`: serbest metin alanı
+   - `high_cardinality`: çok kategorili alan
 
-## Core Workflow
+5. **Identifier Selection**
+   Tanımlayıcı (ID) kolonları otomatik tespit edilir. Kullanıcı seçtiği ID kolonları sonuçlarda referans olarak gösterilir; analize dahil edilmez.
 
-1. User uploads dataset (CSV, Excel, or ZIP)
-2. System inspects structure and previews data
-3. Column quality analysis runs automatically (ID-like, constant, free text, high cardinality)
-4. User selects identifier columns (shown as reference in results, excluded from analysis)
-5. User selects analysis columns (safe defaults pre-selected, flagged columns softly warned)
-6. Three anomaly detection models run and are benchmarked automatically
-7. Best model is selected based on silhouette score
-8. Each row receives an anomaly score and is ranked
-9. Top suspicious records are displayed with feature-level explanations
-10. Optional: Time series anomaly detection if date columns are present
-11. User provides feedback (true anomaly / false alarm)
-12. Optional: Semi-supervised retraining with feedback
-13. Results are downloaded as Excel with highlighted anomaly rows
+6. **Column Coverage Control (Yeni)**
+   Sabit `safe_defaults[:15]` kesimi yerine **dengeli kapsam** önerilir:
+   - Sayısal alanlar + düşük/orta kardinaliteli kategorikler birlikte
+   - Hangi kolonun **dahil**, hangisinin **hariç** olduğunu ve nedenini gösteren rapor
+   - Prefix bazlı **kolon grupları** (ör. `originator_*`, `beneficiary_*`, `customer_*`) otomatik tespit edilir
+   - Beneficiary tarafı artık otomatik kapsamda — kör nokta yok
 
----
+7. **Data Quality Checks (Yeni)**
+   ML'den önce bağımsız bir kural katmanı çalışır. 11 kural sınıfı: negatif/sıfır tutar, parse-edilemeyen sayı veya tarih, kontrol karakteri, isim alanında sadece rakam, şubede ülke adı gibi beklenmeyen değer, beklenmeyen para birimi, tekrarlayan referans, aşırı uzun metin, uzak gelecek/geçmiş tarih, boş zorunlu alan. Sonuç hem **kullanıcıya kalite uyarısı** olarak hem de istenirse modele **binary feature** olarak girer.
 
-## Model Approach
+8. **Preprocessing Pipeline**
+   - Missing value handling (numeric → median, categorical → mode)
+   - OneHotEncoding (preset eşiği — 15-25 kategori)
+   - Frequency encoding (yüksek kardinaliteli kategorikler için)
+   - **Rare category flag + freq** (her kategorik için ek özellik)
+   - **Combo frequency** (örn. para birimi + kanal + işlem tipi nadir kombinasyonlar)
+   - **Rule-based binary features** (DQ kontrol bayraklarından)
+   - StandardScaler normalizasyonu
 
-This project uses three classical anomaly detection techniques. All three models are run automatically and the best one is selected based on silhouette score.
+9. **Model Benchmarking + Ensemble**
+   Üç algoritma paralel çalıştırılır: **Isolation Forest**, **Local Outlier Factor**, **One-Class SVM**. Tek bir "en iyi model" seçimi yerine üç sonuç birden tutulur ve **ensemble skor** üretilir:
+   - Her modelin percentile rank'ı (preset ağırlıklı) ortalaması
+   - Herhangi bir modelin top-%5'ine giren kayıtlar (`any-of-top` mask)
+   - Otomatik seçimde silhouette skoru **preset model ağırlığı** ile çarpılır → kategorik anomali için LOF'un, tutar uçları için IF/OCSVM'in görünmemesi engellenir
+   - UI'da sekmeler: `Önerilen (Ensemble)`, `Isolation Forest`, `Local Outlier Factor`, `One-Class SVM`
 
-### Isolation Forest
+10. **Anomaly Scoring & Ranking**
+    - Her kayda anomali skoru atanır
+    - Kayıtlar şüphelilikten en az şüpheliye sıralanır
+    - Top-N en şüpheli kayıtlar tabloda gösterilir
 
-Isolates anomalies through random partitioning. Works well for general-purpose tabular data.
+11. **Feature-Level + Categorical Explanation (Genişletildi)**
+    Her şüpheli kayıt için kategorize edilmiş açıklamalar:
+    - **Sayısal sapmalar** — değer, tipik medyan, z-skor yönü
+    - **Nadir kategorik değerler** — değerin global frekansı yüzde olarak
+    - **Olağan dışı kombinasyon** — seçilen kolonların birlikte ne sıklıkta görüldüğü
+    - **Kural ihlalleri** — DQ katmanından gelen tetiklenen kurallar
 
-- Does not require labeled data
-- Efficient and scalable
-- Effective when anomalies are rare
+12. **Temporal Anomaly Detection (opsiyonel)**
+    - Tarih kolonu varsa rolling mean/std analizi yapılır
+    - `rolling_mean ± 2.5 * rolling_std` bandı dışındaki noktalar işaretlenir
+    - Trend, güven bandı ve şüpheli noktalar görselleştirilir
 
-### Local Outlier Factor (LOF)
+13. **Persistent Human Feedback Loop (Genişletildi)**
+    - Kullanıcı her şüpheli kaydı **gerçek anomali** veya **yanlış alarm** olarak işaretler
+    - Geri bildirimler `~/.anomaly_detection_feedback.json` dosyasında **oturumlar arası kalıcı** saklanır
+    - Dataset adı + kolon seçimi hash'i ile tekrar açılınca aynı feedback'ler hatırlanır
+    - Birikim (≥10 gözlem) preset bazında model ağırlıklarını otomatik ayarlar
 
-Compares each record's local density to its neighbors. Good at finding cluster-based outliers.
+14. **Semi-Supervised Retraining**
+    - Yanlış alarm olarak işaretlenen kayıtlar eğitime dahil edilir
+    - Gerçek anomali olarak işaretlenen kayıtlar eğitimden çıkarılır
+    - Güncellenmiş skorlar ve sıralama yeniden üretilir
 
-- Density-based approach
-- Effective for datasets with varying cluster densities
-- Recommended for HR and similar grouped datasets
-
-### One-Class SVM
-
-Draws a boundary around normal data and flags records outside it.
-
-- Kernel-based (RBF)
-- Effective for well-separated anomalies
-- Higher computational cost on large datasets
-
-### Temporal Anomaly Detection
-
-For datasets with date columns, a rolling statistics approach is available.
-
-- Rolling mean and standard deviation with configurable window
-- Flags data points outside rolling_mean +/- 2.5 * rolling_std
-- Visualizes trend, confidence band, and anomalous time points
-
-### Semi-Supervised Retraining
-
-After user feedback, the model is retrained:
-
-- Records marked as "normal" are included in the training set
-- Records marked as "anomaly" are excluded from training
-- Updated results are displayed and downloadable
-
----
-
-## System Architecture
-
-### 1. User Interface Layer
-- Built with Streamlit
-- File upload (CSV, Excel, ZIP)
-- Interactive column selection with quality recommendations
-- ID column selection for result referencing
-- Preset scenario tips
-- Visualization of results with Plotly
-- Feedback buttons for each suspicious record
-- Excel download with styled anomaly highlighting
-
-### 2. Data Processing Layer
-- File reading (CSV, Excel, ZIP with automatic extraction)
-- Column type detection (numeric, categorical, datetime)
-- Column quality analysis (ID-like, constant, free text, high cardinality detection)
-- Missing value handling (median for numeric, mode for categorical)
-- OneHotEncoding for low-cardinality categoricals (<=15 categories)
-- Frequency encoding for high-cardinality categoricals (>15 categories)
-- StandardScaler normalization
-
-### 3. ML Layer
-- Automatic model benchmarking (Isolation Forest, LOF, One-Class SVM)
-- Model selection via silhouette score
-- Anomaly scoring and ranking
-- Feature deviation analysis per record
-- Temporal anomaly detection with rolling statistics
-- Semi-supervised retraining with user feedback
-
-### 4. Review Layer
-- Display top anomalies with ID columns as reference
-- Feature-level explanations (value vs. typical, deviation magnitude)
-- Human feedback collection
-- Updated results after feedback-based retraining
+15. **Output & Reporting**
+    - Excel export (.xlsx) — anomali satırları **neon sarı** ile vurgulanır
+    - Tüm sonuçlar veya yalnızca top-N şüpheli kayıt ayrı ayrı indirilebilir
+    - Geri bildirim sonrası güncellenmiş rapor da indirilebilir
 
 ---
 
-## Features
+## 🧩 Architecture Overview
 
-- Upload CSV, Excel, or ZIP files (up to 1 GB)
-- Preview datasets with summary statistics
-- Automatic column quality analysis and soft recommendations
-- ID column detection and identifier selection
-- Preset scenario tips (General, Finance, HR, Call Center)
-- Automatic model benchmarking and selection
-- Display anomaly scores and suspicious record rankings
-- Feature-level deviation explanations for each record
-- Time series anomaly detection with trend visualization
-- Human feedback loop (true anomaly / false alarm)
-- Semi-supervised retraining based on feedback
-- Download results as Excel with neon yellow highlighted anomaly rows
+**Core Layers:**
 
----
+- **Data Loading & Type Inference Layer**
+  CSV / Excel / XML / ZIP okuma; ad ve içerik bazlı tip tespiti; numeric coercion (Türkçe ondalık + kontrol karakteri temizleme); kullanıcı override'ı için `apply_column_kinds` API.
 
-## Preset Scenarios
+- **Data Quality Layer (Yeni)**
+  Kural tabanlı 11 kontrol; severity bazında raporlama; row-level binary feature üretimi.
 
-The application provides preset tips for common dataset types. These do not affect the pipeline; they serve as guidance for the user.
+- **Feature Engineering Layer**
+  Dengeli default seçim; OneHot + frequency + rare-flag + combo-frequency + rule-feature kombinasyonu; StandardScaler.
 
-| Preset | Description | Suggested Contamination |
-|--------|-------------|------------------------|
-| Genel (Varsayilan) | General-purpose datasets | 5% |
-| Islem / Finans Verisi | Payments, invoices, insurance claims | 2% |
-| Insan Kaynaklari Verisi | Salary, performance, attendance | 5% |
-| Cagri Merkezi Verisi | Call duration, wait time, satisfaction | 5% |
+- **ML Layer (Anomaly Engine)**
+  Üç klasik algoritma paralel; **rank-percentile ensemble**; preset-ağırlıklı silhouette ile model seçimi; yarı denetimli yeniden eğitim için Isolation Forest.
 
----
+- **Explanation Layer (Genişletildi)**
+  Sayısal z-skor + kategorik nadir değer + kombinasyon nadirliği + kural ihlali sinyallerini birleştiren `explain_record` API'si.
 
-## Example Use Case
+- **Temporal Layer**
+  Tarih kolonu olan veri setleri için rolling istatistik tabanlı zaman serisi anomali tespiti.
 
-A user uploads an operational dataset. The system automatically analyzes column quality, detects ID columns, and recommends safe columns for analysis. Three anomaly detection models run in parallel and the best one is selected. The most suspicious entries are displayed with explanations showing which features deviate most from typical values. The user reviews results, marks some as true anomalies or false alarms, and reruns the model with feedback. Final results are downloaded as an Excel file with anomaly rows highlighted in yellow.
+- **UI Layer (Streamlit)**
+  Veri yükleme, kolon tipi kontrolü, kapsam kontrolü, DQ paneli, ensemble sekmeli sonuçlar, kayıt inceleme, geri bildirim toplama.
+
+- **Feedback Persistence Layer (Yeni)**
+  Dataset signature bazlı JSON store; preset bazında precision-aware model ağırlık türetimi.
+
+- **Export & Reporting Layer**
+  Anomali satırları sarı ile vurgulanmış Excel çıktıları.
 
 ---
 
-## Tech Stack
+## 🤖 Model & Technology Stack
 
-- Python
-- Streamlit
-- Pandas
-- NumPy
-- Scikit-learn
-- Plotly
-- Matplotlib
-- OpenPyXL
+### Machine Learning
+- **Isolation Forest** — random partitioning ile anomali izolasyonu (genel amaçlı, tutar uçları için güçlü)
+- **Local Outlier Factor (LOF)** — yoğunluk tabanlı, küme içi outlier tespiti (kategorik manipülasyon için güçlü)
+- **One-Class SVM** — RBF kernel, normal sınırını çizen model
+- **Ensemble** — rank-percentile ortalaması + any-of-top mask
+- **Preset-Weighted Silhouette** — model seçim metriği (preset ağırlığı ile çarpılır)
+- **Rolling Statistics** — zaman serisi anomali tespiti
 
----
-
-## Project Structure
-
-```
-anomaly-detection/
-├── app/
-│   ├── __init__.py
-│   ├── streamlit_app.py          # Main Streamlit application
-│   ├── logic/
-│   │   ├── __init__.py
-│   │   ├── file_loader.py        # CSV, Excel, ZIP file loading
-│   │   ├── preprocessing.py      # Column analysis, encoding, scaling
-│   │   ├── anomaly_model.py      # ML models, benchmarking, temporal analysis
-│   │   └── presets.py            # Preset scenario configurations
-│   └── utils/
-│       └── __init__.py
-├── data/
-│   └── sample_files/
-├── .streamlit/
-│   └── config.toml               # Theme and upload size configuration
-├── requirements.txt
-├── README.md
-└── .gitignore
-```
+### Backend & UI
+- Python 3.10+
+- Pandas / NumPy
+- Scikit-learn (IsolationForest, LocalOutlierFactor, OneClassSVM, StandardScaler, OneHotEncoder)
+- Plotly (görselleştirmeler)
+- Streamlit (Cloud için ≥1.30, Windows terminal için 1.26.0 desteği)
+- OpenPyXL (Excel export & vurgulama)
+- lxml (XML parsing için)
 
 ---
 
-## Input Format
+## 🧠 ML Strategy
 
-Supported formats:
+Anomali tespiti, erken aşamalarda LLM tabanlı mimarilerden çok klasik ML için uygundur. Sebepleri:
 
-- CSV
-- Excel (.xls, .xlsx)
-- ZIP (containing CSV or Excel files)
+- Daha düşük karmaşıklık
+- Daha hızlı geliştirme
+- İç ortamlara daha kolay deployment
+- Daha düşük operasyonel maliyet
+- Daha öngörülebilir davranış
+- Dış AI servislerine bağımlılık yok
 
-Expected structure:
+LLM, mevcut versiyonda **kullanılmaz**. Phase 2'de yorumlama katmanı olarak eklenmesi planlanır:
+- Şüpheli kayıt için doğal dil açıklaması
+- Konuşmalı arayüz
+- Otomatik root-cause yorumu
 
-- Rows = observations
-- Columns = features
-- Mostly structured data
-
-The system automatically detects and warns about:
-- ID-only columns (high unique ratio or name contains "id")
-- Constant columns (single value)
-- Free-text fields (high average word count)
-- High-cardinality categoricals (>50 unique values)
-
-Users can still include warned columns if they choose to.
+Bu yaklaşım, hem **açıklanabilirlik** hem de **kontrol edilebilirlik** sağlar.
 
 ---
 
-## Output
+## 📊 Example Output
 
-The system produces:
+Her şüpheli kayıt için sistem aşağıdaki çıktıları üretir:
 
-- Anomaly scores for each record
-- Anomaly ranking (most suspicious first)
-- Top suspicious records with ID columns as reference
-- Feature-level deviation explanations
-- Time series anomaly visualization (if applicable)
-- Feedback summary statistics
+- Anomaly Score (ensemble veya tek model)
+- Rank (en şüpheliden başlayarak)
+- ID Reference (kullanıcı seçtiği tanımlayıcı kolonlardan)
+- **Sapma açıklamaları** — sayısal, kategorik, kombinasyon, kural ihlali kategorilerinde
+- Excel Export (anomali satırları **neon sarı** ile)
+- Time Series Visualization (uygulanabilir veri setleri için)
+- Feedback Summary (gerçek anomali / yanlış alarm sayıları, kalıcı kayıt durumu)
 
-Downloadable outputs:
+### Preset Senaryolar
 
-- Full results as Excel (.xlsx) with anomaly rows highlighted in neon yellow
-- Top N suspicious records as Excel (.xlsx) with highlighting
-- Updated results after semi-supervised retraining
+Presetler artık sadece ipucu değil; **contamination aralığı**, **model ağırlıkları**, **rule check toggles**, **allowed currencies**, **encoding stratejisi** ve **numeric hint listesi** preset bazında değişir.
 
----
-
-## Limitations
-
-- No business context awareness
-- Performance varies by dataset
-- Limited support for text-heavy data
-- No natural language explanations
-- Feedback is not persisted across sessions
-- Semi-supervised retraining uses only Isolation Forest
-
-This tool should be used as a **decision support system**, not a fully automated solution.
+| Preset | Açıklama | Önerilen Contamination | Model Ağırlığı (IF / LOF / OCSVM) |
+|--------|----------|------------------------|------------------------------------|
+| Genel (Varsayılan) | Genel amaçlı veri setleri | 5% | 1.0 / 1.0 / 1.0 |
+| İşlem / Finans Verisi | Ödeme, fatura, sigorta talepleri | 2% | 1.1 / 1.3 / 1.0 |
+| İnsan Kaynakları Verisi | Maaş, performans, devam | 5% | 1.0 / 1.2 / 0.9 |
+| Çağrı Merkezi Verisi | Süre, bekleme, memnuniyet | 5% | 1.1 / 1.0 / 1.0 |
+| Operasyon / Üretim Verisi | Sensör, lojistik, üretim hattı | 4% | 1.2 / 1.0 / 1.0 |
 
 ---
 
-## Future Enhancements
+## 🔐 Banking & Compliance Considerations
 
-- LLM-based explanation layer
-- Natural language interface
-- Automated feature suggestions
-- Feedback persistence and model versioning
-- Ensemble model support
-- Advanced visualization
-- Domain-specific configurations
-- API endpoints for integration
-
----
-
-## Phase Planning
-
-### Phase 1 (Current)
-- Classical ML anomaly detection (Isolation Forest, LOF, One-Class SVM)
-- Automatic model benchmarking and selection
-- Column quality analysis and ID detection
-- Time series anomaly detection
-- Human feedback loop with semi-supervised retraining
-- Excel export with anomaly highlighting
-- Streamlit UI with preset scenario tips
-
-### Phase 2
-- LLM integration
-- Natural language explanations
-- Conversational interface
-- Feedback persistence
+- Kişisel veri ve hassas veri kullanımına dikkat edilmelidir
+- Model çıktıları **karar destek aracı** olarak konumlandırılmalıdır
+- ID kolonları analiz dışı tutulur; yalnızca referans olarak gösterilir
+- Feature seçim süreci kullanıcı kontrolünde tutulur
+- Kalite uyarıları kullanıcıya açıkça iletilir (id_like / constant / free_text / high_cardinality + 11 DQ kuralı)
+- Açıklanabilirlik (sayısal + kategorik + kombinasyon + kural ihlali) ön planda tutulur
+- Geri bildirim döngüsü insan denetimini koruyacak şekilde tasarlanmıştır
+- Feedback dosyası kullanıcının lokal makinesinde saklanır (`~/.anomaly_detection_feedback.json`); merkezi sunucuya gönderilmez
 
 ---
 
-## Deployment
+## 🚀 Business Impact
 
-This application is designed for Streamlit Cloud deployment.
-
-1. Push the repository to GitHub
-2. Connect to Streamlit Cloud
-3. Set the main file path to `app/streamlit_app.py`
-
-To run locally:
-
-```bash
-pip install -r requirements.txt
-streamlit run app/streamlit_app.py
-```
+- Manuel denetim süresini ciddi ölçüde azaltır
+- Teknik olmayan ekiplerin olağandışı kayıtları tespit etmesini sağlar
+- Risk, denetim ve operasyon ekiplerinin önceliklendirme süreçlerini hızlandırır
+- Geri bildirim yoluyla zamanla daha hassas hale gelir (kalıcı feedback + preset ağırlık ayarı)
+- Excel raporlarıyla mevcut kurumsal iş akışına kolayca entegre olur
+- Açıklanabilir çıktılar sayesinde karar gerekçeleri loglanabilir hale gelir
 
 ---
 
-## Requirements
+## 🔮 Future Enhancements
 
-```
-streamlit>=1.30.0
-pandas>=2.0.0
-numpy>=1.24.0
-scikit-learn>=1.3.0
-openpyxl>=3.1.0
-plotly>=5.18.0
-matplotlib>=3.7.0
-```
+- LLM tabanlı doğal dil açıklama katmanı (Phase 2)
+- Konuşmalı kayıt sorgulama arayüzü
+- Otomatik feature öneri motoru
+- Drift detection entegrasyonu
+- API endpoint desteği
+- Çok dosyalı / akış bazlı analiz
+- Domain-spesifik konfigürasyon profillerinin paylaşılabilmesi (preset import/export)
